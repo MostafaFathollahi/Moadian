@@ -1,0 +1,2285 @@
+
+===== PAGE 1 =====
+ 
+ 
+ 
+دفتر توسعه خوداظهاری و تمکین  داوطلبانه  
+سند  
+«دستورالعمل فنی اتصال به سامانه مودیان» 
+ 
+ 
+ 
+ 
+ 
+ 
+شناسه  سند: 
+RC_TICS.IS_v1.6 
+ 
+شهریور ۰۴۱۴ 
+
+===== PAGE 2 =====
+ 
+سنددستورالعمل فن ی اتصال به سامانه مودی ان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+2 
+ 
+مقدمه  
+زیرسامانهی جمعآوری  صورتحساب  یکی  از  زیرسامانههای  سامانهی  مودیان  است که وظیفهی  دریافت  
+صورتحساب، ارسال به هسته، گرفتن نتیجه اعتبارسنجی صورتحساب و ذخیرهکردن آن  و پاسخ به استعلامهای  
+صورتحسابها ی  ارسالی  از سمت مودی   را برعهده دارد. ای ن  زیرسامانه دارای یک وبسرویس میباشد که تمامی 
+درخواستها از طریق این وبسرویس به سامانه ارسال شده و پاسخ داده می شوند. این وبسرویس  در چهارچوب 
+REST API  پی اده سازی شده و فراخوانی آن نی ازمند احراز هویت 1 مودی از طریق  امضای دیجی تال میباشد.  
+در این سند منابع موجود در این وب  سرویس و نحوهی فراخوانی و پاسخ دهی هر کدام شرح داده خواهد 
+شد و در نهایت در قالب یک مثال فرآیند اتصال به سامانهی مودیان و ارسال صورتحساب به طور کامل انجام  
+میگیرد.  
+ 
+  
+ 
+۱ Authentication 
+
+===== PAGE 3 =====
+ 
+سنددستورالعمل فن ی اتصال به سامانه مودی ان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+3 
+ 
+فهرست مطالب 
+1 - تعاریف ................................................................................................. 4 
+2 - دریافت شناسه یکتای حافظه مالیاتی  .............................................................. 5 
+3 - مراحل ارسال صورتحساب و استعلام  وضعیت آن  ................................................. 6 
+4 - منابع در دسترس و کاربردهای هر کدام  ........................................................... 6 
+5 - دریافت چالش تصادفی   و احراز هوی ت .............................................................. 9 
+6  - دریافت اطلاعات  سرور ............................................................................. 17 
+7 - ارسال صورتحساب  ................................................................................. 18 
+8 - استعلام وضع یت صورتحساب های ارسال ی  ....................................................... 33 
+9 - استعلام اطلاعات حافظه  و مودی  ................................................................. 42 
+۰- استعلام  وضعیت صورتحساب در  کارپوشه  ...................................................... 44 
+11- ارسال پرداخت صورتحساب  ...................................................................... 45 
+-12پیوست ها  ............................................................................................ 47 
+ 
+  
+
+===== PAGE 4 =====
+ 
+سنددستورالعمل فن ی اتصال به سامانه مودی ان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۴ 
+ 
+1 - تعاریف 
+عنوان  تعریف 
+امضای  
+دیجیتال 2 
+فرآیندی  که ط ی  آن فرستنده پی ام  به وسی لهی  یک  کلید  خصوصی،  رشتهای  به نام امضا 
+تولی د  م یکند  و آن را در کنار اصل پی ام  برای  گی رنده  میفرستد. گی رنده   با در اختی ار  
+داشتن کلید  عمومی  فرستنده میتواند  نسبت به اصالت فرستنده اطمینان  حاصل کند و 
+مطمئن شود محتوای پی ام در طول مسی ر تغییری نکرده است. 
+گواهی امضا3 
+گواهی الکترونیکی امضا برای اشخاص حقیقی یا گواهی الکترونیکی مهر سازمانی برای
+اشخاص حقوقی  صادر شده  توسط  مراکز می انی  صدور گواهی  الکترونی ک ی،  شامل کلی د  
+عمومی  امضا، تاریخ  انقضا و اطلاعات شناسا یی  هویت ی  افراد که  در قالب  یک  فایل  crt  
+یاcer  میباشد  و برا ی   بررسی  صحت امضا ی  بستههای  ارسالی  مورد استفاده قرار  
+میگی رد.  
+صورتحساب  
+الکترونی ک  
+صورتحسابی  است دارای  شماره منحصر به فرد مالی اتی  که اطلاعات مندرج در آن، در  
+حافظه مال ی اتی   فروشنده ذخ یره  می  شود. مشخصات و اقلام اطلاعات ی  صورتحساب 
+الکترونی کی ،  متناسب با نوع کسب و کار توسط سازمان تع یی ن  و اعلام م ی  شود. در 
+مواردی  که از دستگاه کارتخوان بانکی  یا  درگاه  پرداخت الکترونی ک ی  به عنوان پایانه 
+فروشگاهی  استفاده می  شود، رسی د  یا  گزارش الکترونی کی  پرداخت خرید  صادره در 
+حکم صورتحساب الکترون یکی است.  
+شماره مالی اتی 
+شماره منحصر به فرد مشخص کننده  یک  صورتحساب شامل شناسه حافظه مال ی اتی  
+صادرکننده صورتحساب، تار یخ  صدور، سر یال  صورتحساب و  یک   رقم کنترلی  برای 
+جلوگی ری از صدور شماره مالی اتیهای نامعتبر. 
+شناسه یکتای 
+حافظه مالی اتی 
+شناسهی یکتایی که توسط سازمان اختصاص یافته میشود و مودی میتواند از طریق 
+کارپوشه آن را دریافت کند و از آن به منظور صدور صورتحساب استفاده میشود. 
+ 
+2 Digital Signature 
+3 Digital Signature Certificate 
+
+===== PAGE 5 =====
+ 
+سنددستورالعمل فن ی اتصال به سامانه مودی ان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+5 
+ 
+2 - دریافت شناسه یکتای حافظه مالیاتی 
+مودی  جهت صدور  و ارسال صورتحساب الکترونیکی نیاز به دریافت شناسه یکتا حافظه مالیاتی دارد.  
+بنابراین میبایست به بخش عضویت و ثبت نام کارپوشه خود مراجعه نموده و مراحل زیر را طی نماید: 
+1.  به ازای   هر شناسه  یکتا  حافظه مالی ات ی،  یکی  از سه حالت ارسال اطلاعات صورتحساب را به شرح 
+ذیل انتخاب کند: 
+- توسط مودی  
+- توسط شرکت معتمد / سامانه های دولت ی - با کلی د مودی  
+- توسط شرکت معتمد / سامانه های دولت ی - با کلی د شرکت معتمد / سامانه های دولت ی  
+2.  کلید عمومی/گواهی  امضاء  دریافتی از مراکز میانی معتبر با طول کلید  2048  بیت را بارگذاری
+نماید. در این نسخه امکان بارگذاری گواهی امضاء نیز در کارپوشه افزوده شده است. 
+نکته: در صورتی که ارسال غیرمستقیم باشد و شرکت معتمد ارائه کننده خدمات مالیاتی صدور،  
+رمزگذاری  و ارسال صورتحساب را به  عهده داشته باشد، بارگذاری کلید عمومی/گواهی امضاء توسط مودی  
+ضرورتی ندارد. در این حالت شرکت معتمد ارائه کننده خدمات مالیاتی باید از طریق کارپوشه خود، کلید 
+عمومی/گواهی امضاء مربوطه را به سازمان معرفی نماید. 
+ 
+ 
+توجه: این سند با هدف استفاده از نسخه دوم  APIهای سامانه مودیان  و جهت تسهیل 
+در فرآیند ارسال صورتحساب و اتصال به سامانه مودیان  منتشر شده است. در این نسخه قابلیت  
+استفاده از گواهی امضاء برای احراز هویت و ارسال صورتحساب ایجاد شده است.  لازم به  ذکر  
+است تا اطلاع  ثانوی  امکان استفاده از نسخه قبلی  APIهای سامانه مودیان نیز فراهم میباشد  
+که راهنمای استفاده از آن به پیوست این سند بارگذاری گردیده است. 
+
+===== PAGE 6 =====
+ 
+سنددستورالعمل فن ی اتصال به سامانه مودی ان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+6 
+ 
+3 - مراحل ارسال صورتحساب و استعلام وضعیت آن 
+ 
+ 
+4 - منابعدر دسترس و کاربردهای هر کدام 
+وب سرویس  جمعآوری سامانهی مودیان در آدرس https://tp.tax.gov.ir/requestsmanager در
+دسترس  میباشد. منابع موجود در این  وب سرویس  شامل موارد زیر  است  (جدول  1 )  که توضیحات کامل هر
+کدام به همراه مثال در  ادامه به شکل کامل داده خواهد شد  فراخوانی همه ی منابع موجود در وب سرویس 
+جمعآوری سامانهی مودیان نیازمند احراز هویت فراخوانی کننده میباشند. به جز منبع  دریافت چالش تصادفی ک ه 
+به منظور احراز هویت به کار میرود که جزئیات آن در ادامه توضیح داده خواهد شد.
+(1 )دریافت چالش
+تصادفی
+(2 )ساختبدنه JWT
+(3 )ساخت سرآیند
+JWT
+(4 )امضا و تولید توکن 
+احراز هویت
+(5 )دریافت اطلاعات
+سرور
+(6 )تولید صورتحساب
+الکترونیکی
+(7 )امضای صورتحساب
+با ساختار JWS
+(8 )رمزنگاری
+صورتحساب با ساختار 
+JWE
+(9 )تولید(uid )برای
+صورتحساب
+(۰) تولید توکن احراز 
+هویت (مراحل 1تا4)
+(11 )فراخوانیAPI
+ارسال صورتحساب
+(12 )دریافت شماره
+پیگیری
+(13 )صبر کردن به
+مدت چند ثانیه
+(14 )تولید توکن احراز
+هویت (مراحل 1تا4)
+(15 )استعلام وضعیت
+صورتحساب
+تولید توکن JWT  احراز هویت 
+
+===== PAGE 7 =====
+ 
+7 
+ 
+آدرس درخواست  ساختار خروجی  توضیحات  
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/nonce 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/nonce?timeToLive=20' \ 
+  -H 'accept: */*' 
+{ 
+  "nonce": "string", 
+  "expDate": "string" 
+} 
+دریافت چالش تصادفی 
+راهنما در صفحه  10    
+POST 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/invoice 
+curl -X 'POST' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/invoice' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGc [ JWT Token ] dLcdPeI_9Q' \ 
+  -H 'Content-Type: application/json' \ 
+  -d '[ 
+  { 
+    "payload": "eyJhbGciOiJ...[ JWE ]...EEzZe9mxIxw", 
+    "header": { 
+      "requestTraceId": "cf019c26-f235-11ed-a05b-0242ac120003", 
+      "fiscalId": "A11216" 
+    } 
+  } 
+]' 
+{ 
+  "timestamp": 0, 
+  "result": [ 
+    { 
+      "uid": "string", 
+      "packetType": "string", 
+      "referenceNumber": "string", 
+      "data": "string" 
+    } 
+  ] 
+} 
+ارسال صورتحساب 
+راهنما در صفحه  81 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/taxpayer 
+curl -X 'GET' \ 
+  
+'https://tp.tax.gov.ir/requestsmanager/api/v2/taxpayer?economic
+Code=14003778990' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbG...[ JWT Token ]...klQXOuA' 
+{ 
+  "nameTrade": "string", 
+  "taxpayerStatus": "string", 
+  "nationalId": "string" 
+} 
+دریافت اطلاعات
+پروندهی مودی  
+راهنما در صفحه  34 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/fiscal-
+information 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/fiscal-
+information?memoryId=A11216' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGc...[ JWT Token ]...OFh9zw' 
+{ 
+  "nameTrade": "string", 
+  "fiscalStatus": "string", 
+  "nationalId": "string", 
+  "economicCode": "string" 
+} 
+دریافت اطلاعات
+حافظه 
+راهنما در صفحه  24 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/server-
+information 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/server-
+information' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGci...[JWT]...Jvl8fvHm0PKVA' 
+{ 
+  "serverTime": 0, 
+  "publicKeys": [ 
+    { 
+      "key": "string", 
+      "id": "string", 
+      "algorithm": "string", 
+      "purpose": 0 
+    } 
+  ] 
+} 
+دریافت اطلاعات
+سرور 
+راهنما در صفحه  71 
+
+===== PAGE 8 =====
+ 
+8 
+ 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/inquiry-
+by-reference-id 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-
+reference-id?referenceIds=f9173085-2316-4ca6-918e-
+e41aaf7ef8dd&referenceIds=93367b02-23dd-4568-90e1-
+2b47d799f361&start=2023-05-
+14T10%3A00%3A00.000000000%2B03%3A30&end=2023-05-
+14T21%3A00%3A00.000000000%2B03%3A30' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGc...[ JWT TOKEN ]...q4RcXogA' 
+[ 
+  { 
+    "referenceNumber": "string", 
+    "uid": "string", 
+    "status": "string", 
+    "data": {}, 
+    "packetType": "string", 
+    "fiscalId": "string", 
+    "sign": "string" 
+  } 
+] 
+استعلام صورتحساببا  
+شماره پیگیری  
+راهنما در صفحه  43 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/inquiry-
+by-uid 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-
+uid?uidList=cb080c58-e36f-4bb0-a932-
+90f672109fb6&uidList=b3bd6327-1c57-4cae-85ed-
+5c88de28aea3&fiscalId=A111YO&start=2023-06-
+10T00%3A00%3A00.000000000%2B03%3A30&end=2023-06-
+10T23%3A59%3A59.999999999%2B03%3A30' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGciO...[JWT TOKEN]...ski8e-A' 
+[ 
+  { 
+    "referenceNumber": "string", 
+    "uid": "string", 
+    "status": "string", 
+    "data": {}, 
+    "packetType": "string", 
+    "fiscalId": "string", 
+    "sign": "string" 
+  } 
+] 
+استعلام با شناسه
+درخواست (uid) 
+راهنما در صفحه73 
+GET 
+https://tp.tax.gov.i
+r/requestsmanager
+/api/v2/inquiry 
+curl -X 'GET' \ 
+'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry?start=202
+3-06-10T00%3A00%3A00.000000000%2B03%3A30&end=2023-06-
+10T23%3A59%3A59.999999999%2B03%3A30&pageNumber=1&pageSize=10' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGci...[JWT TOKEN]...KXzBjRZw' 
+[ 
+  { 
+    "referenceNumber": "string", 
+    "uid": "string", 
+    "status": "string", 
+    "data": {}, 
+    "packetType": "string", 
+    "fiscalId": "string", 
+    "sign": "string" 
+  } 
+] 
+استعلام براساس بازه
+زمانی 
+راهنما در صفحه  40 
+جدول۱ 
+ 
+
+===== PAGE 9 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+9 
+ 
+5 - دریافت چالش تصادفی و احراز هویت 
+مکانی زم  احراز هویت  در وبسرویس  جمعآوری  سامانهی  مودیان  بر اساس استاندارد  «
+هویت  در زیرساخت  کل ی د  عمومی  ایران  منتشر شده توسط  «ی  صدور گواهی  الکترونیک  ریشه  میباشد   
+که بر مبنای  امضای  دیجیتال  طراحی  شده. جهت اتصال به این  وب سرویس  و پی ادهساز ی  این  پروتکل لازم است  
+که  یک  امضای  دیجی تال  -شامل کلی د  خصوصی  امضاء  یا  توکن امن یت ی،  به همراه گواهی  امضای  الکترونی ک  معتبر،  
+صادر شده توسط مراکز صدور گواهی الکترونی ک می انی-  در اخت یار داشته باشید. 
+5- 1-  مراحل احراز هویت هر درخواست 
+مراحل احراز هویت درخواست به شکل زیر است که در ادامه جزئیات هر یک شرح داده میشود: 
+1. دریافت چالش تصادفی4 (رشتهی تصادفی)  
+2. قرار دادنclientId وnonce و ساختنpayload توکنJWT 
+3. ایجادheader توکنJWT براساس ساختار مشخص وقراردادن گواهی امضا در آن  
+4. امضایheader وpayload براساس استانداردJWS و ساخت توکن 
+5. فراخوانی درخواست بعدی با قرار دادن توکن در سرآیند درخواست 
+فرآیند  احراز هویت  بدین  صورت است که ابتدا شما بای د  API  چالش تصادفی  را فراخوانی  کنی د. ای ن  
+API  نی از  به اعتبارسنجی  ندارد و  یک  رشته تصادفی  یکبار  مصرف و دارای  مهلت استفاده محدود تولید  کرده و 
+به شما میدهد . شما باید  قبل از منقضی  شدن این  رشته آن را به همراه گواهی  امضا ی  خود امضا کرده و در  
+درخواست بعدی در بخش Http Header به عنوان توکن ارسال نمائی د.  
+توجه شود که  فرآیند  گرفتن  Nonce  و تولی د  توکن،  برای  انجام هر درخواست الزامی  است و توکن ی  که 
+برای یک درخواست ساخته میشود تنها یکبار قابل استفاده خواهد بود. 
+ 
+۴ Nonce 
+
+===== PAGE 10 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۰۱ 
+ 
+5- 1- 1-  دریافت چالش تصادفی 
+این  Api  یک  ورودی  timeToLive  دارد که زمان اعتبار چالش تصادف ی  را مشخص م یکند. در  
+صورتی  که ای ن  ورودی  خال ی  باشد به طور پی شفرض  چالش  30  ثانی ه  معتبر خواهد بود. در پاسخ رشته تصادفی   
+تولی د  شده برگردانده میشود . 
+Get Nonce – چالش تصادفی 
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/nonce 
+Method GET 
+ورودی 
+• timeToLive: مدت زمان اعتبار رشته تصادفی به ثانی ه 
+o نوع ورودی: اختی اری 
+o محل قرارگی ری: Request Params 
+o مقدار پ ی شفرض: 30 
+o مقادیر مجاز: 10 تا200 
+خروجی 
+• nonce: رشته تصادفی تولید شده  
+• expDate: زمان انقضای رشته تصادفی  
+نمونه درخواست دریافت چالش تصادفی: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/nonce?timeToLive=20' \ 
+  -H 'accept: */*' 
+خروجی برابر است با: 
+{ 
+  "nonce": "ab202a55-e106-445c-b2a3-5a7364991a66", 
+  "expDate": "2023-08-22T16:07:18.277824208Z" 
+} 
+5- 1- 2-  امضایNonce و تولیدتوکن 
+پس از دریافت  رشته تصادفی  Nonce، این  رشته با ید  تبدیل  به توکن  JWS  شود و امضا شود. فرمت 
+header وpayload توکنJWS تولید شده به شکل زیر است 
+ 
+
+===== PAGE 11 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۱۱ 
+ 
+ساختار توکن JWS 
+Header 
+یک شیء JSON دارای فی لدهای زیر: 
+• alg: الگوریتم  امضا: RS256 
+• x5c: لی ست ی که شامل گواهی امضای مودی  باشد. کد شده به فرمت Base64 
+• sigT: زمان امضای توکن 
+o فرمت: 
+yyyy-MM-dd'T'HH:mm:ss'Z' 
+o نمونه: 
+2023-05-13T10:44:47Z 
+• crit: لی ستی  از ف ی لدهای  ضرور ی  در قسمت  Header. تنها شامل رشتهی  "sigT " 
+توجه کنید که مقدار فیلدsigT  باید طبق استانداردISO_8601  باشد و در صورتی که با
+کاراکتر  Z  ختم شود باید به منطقه زمانیUTC  باشد. در صورتی که بخواهید زمان محلی را
+در امضای صورتحساب ارسال نمایید میتوانید در انتهای آن عبارت  0330"  را اضافه
+کنید:  
+2023-05-13T14:14:47Z+0330 
+همچنین در فیلد x5c  که به صورت لیست است، می توانید گواهی امضای   مرکز میانی  
+صادرکنندهی گواهی خود را نیز ارسال نمایید که به عنوان زنجیره گواهیهای تایید کنندهی  
+بسته شناخته میشوند تا به یک گواهی مورد اعتماد برسد (Trusted cert). البته این مورد
+ضرورتی ندارد زیرا گواهیهای معتبر  تمامی مراکز میانی  فعال  و گواهی مرکز ریشه همگی 
+به عنوان گواهیهای مورد اعتماد شناخته میشوند.  
+Payload 
+یک شیء Json دارای  دو فی لد زیر: 
+• nonce: رشته تصادفی یکبارمصرف دریافت شده 
+• clientId: شناسه ارسال کننده صورتحساب 
+o برای مودیان همان شناسه حافظه صادر کننده صورتحساب 
+o برای شرکتها ی معتمد شناسه شرکت معتمد 
+Signature 
+ورودی الگوریتم امضا برابر است با 
+ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || 
+BASE64URL(JWS Payload)) 
+
+===== PAGE 12 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+2 
+ 
+الگوریتم  مورد استفاده در امضای  توکن،  RSASSA-PKCS1-v1_5 using SHA-256  
+میباشد. 
+کلید  خصوصی  امضا باید  کلی د  خصوصی  معادل با گواه ی  فرستاده شده در بخش  header  
+باشد که امضای توکن توسط آن گواهی  Verify شود 
+مطابق استاندارد RFC7515 قالب چیدمان توکنJWS به صورت زیر است: 
+BASE64URL(UTF8(JWS Protected Header))  || '.' ||  
+BASE64URL(UTF8(JWS Payload()  || '.' ||  
+BASE64URL(JWS Signature) 
+توجه کنیدکه فرمت  Header  بستهی  JWS  و محتویات بستهPayload) باید حتماutf-8  باشد و
+رشتهی  Header  وPayload  برای امضا و تولید توکن بهفرمت  Base64URL  کد میشود. برای اطلاعات 
+بیشتر سند RFC7515 را مشاهده کنیدeditor.org/rfc/rfc7515-https://www.rfc 
+لازم به ذکر است گواهی استفاده شده در فرآیند امضای توکناحراز هویت  میبایست معتبر بوده و کد 
+ملی/شناسه ملی موجود در  گواهی5 با مشخصاتارسال کننده درخواست (صاحب clientId) منطبق باشد 
+بعنوان مثال فرض کن ی د Header توکن مای ک Json به شکل زیر باشد: 
+{"crit":["sigT"],"sigT":"2024-03-
+06T13:05:50Z","x5c":["MIIDejCCAmKgAwIBAgIUV27QXqJjK2EgFy9zeYkpsX+ISPswDQYJK
+oZIhvcNAQELBQAwcTELMAkGA1UEBhMCSVIxDDAKBgNVBAgMA1RlaDEMMAoGA1UEBwwDVGVoMREw
+DwYDVQQKDAhNb2hheW1lbjEMMAoGA1UECwwDVGF4MSUwIwYJKoZIhvcNAQkBFhZtLm1hbHZlcmR
+pQG1vaGF5bWVuLmlyMB4XDTIzMDMyNDEzMjgyM1oXDTI0MDMyMzEzMjgyM1owTTEPMA0GA1UEAw
+wGQW56YWxpMRcwFQYDVQQKDA5RdW9WYWRpcyBHcm91cDELMAkGA1UEBhMCSVIxFDASBgNVBAUTC
+zE0MDAzNzc4OTkwMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzLgyk5KO6+j9d1ud
+0ilJArrZ3Whw/w9wEzHB9yXwENRa5fm5AbRukMF5b6VGeKzD6LZuL9+tfdFfWyPcjI++gGNywzR
+mEHKpTnzP1t6NyuXKfm4nBVAblsugSw8Y5DEXRfTqILgBWN/pZ4zGlifEALMcGAs7ADcjnv7b/t
+M2wxr9rHxsCvW4HvlzQasK8Qr1CrKgT0EI66rSXCHep/uIONDWp0W2OelMlZtM6AAjWXRLGcshP
+IHuK+ZLfAFxWtoGonf6qN9ypos2B18D/EFa8WHON62eYKT0kW3jBVa3yPEkRwkdDjDu/3CPzymh
+f3WFYwxpb4t35oWb/qUXGVIdvwIDAQABoy4wLDAfBgNVHSMEGDAWgBSx+Oq+RO3x/FmyCp+jcmf
+OH+Fn9TAJBgNVHRMEAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQAgKATXlnS+pPtAiRIYGtydVU5Vi7
+Aq+D6QW07uFqcB7vBhddN3yX2lVVcwpTNJzhv8UCM+mDMvlmsRVKVtMoo5fHfII92/Wo8rUz1RP
++yhyCk0Vz8I11v+bjLwVur/agC/s5Rf0m66pNNjFZ9J3S2N3lChXYwz2vvA8pdAYvWTu9g5u4FM
+FqlsaLwMGC+WaA0g3KYzRkdWRy1vd23hLTUcVsWM8wpgZ11wEGE1khca/Sd0mCU2HG5vIbqFfTj
+A6to0fY07CE5fD8aR3UcXjNduosVO52ZqCX5SabrhFS3AGHFRjpFnI5LZespiCXSA8Sv3kOSCSR
+QKqFbiwSFM8Zjg"],"alg":"RS256"} 
+همچنین Payload درخواست مابه فرمت  utf-8 شیء زیر است: 
+ 
+5 فیلدSERIALNUMBER  در قسمتSUBJECT گواهی امضاء 
+
+===== PAGE 13 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+3 
+ 
+{ 
+  "nonce": "91dc28af-4c95-47f0-9913-87f8162b1708-1709717749862", 
+  "clientId": "A11226" 
+} 
+با امضای رشته با الگوریتم RS256 و الصاق امضای تولید شده به رشتهی اصلی (به وسیلهی یک  ". ")، 
+توکن JWT ساخته میشود:  
+eyJjcml0IjpbInNpZ1QiXSwic2lnVCI6IjIwMjQtMDMtMDZUMTM6MDU6NTBaIiwieDVjIjpbIk1
+JSURlakNDQW1LZ0F3SUJBZ0lVVjI3UVhxSmpLMkVnRnk5emVZa3BzWCtJU1Bzd0RRWUpLb1pJaH
+ZjTkFRRUxCUUF3Y1RFTE1Ba0dBMVVFQmhNQ1NWSXhEREFLQmdOVkJBZ01BMVJsYURFTU1Bb0dBM
+VVFQnd3RFZHVm9NUkV3RHdZRFZRUUtEQWhOYjJoaGVXMWxiakVNTUFvR0ExVUVDd3dEVkdGNE1T
+VXdJd1lKS29aSWh2Y05BUWtCRmhadExtMWhiSFpsY21ScFFHMXZhR0Y1YldWdUxtbHlNQjRYRFR
+Jek1ETXlOREV6TWpneU0xb1hEVEkwTURNeU16RXpNamd5TTFvd1RURVBNQTBHQTFVRUF3d0dRVz
+U2WVd4cE1SY3dGUVlEVlFRS0RBNVJkVzlXWVdScGN5QkhjbTkxY0RFTE1Ba0dBMVVFQmhNQ1NWS
+XhGREFTQmdOVkJBVVRDekUwTURBek56YzRPVGt3TUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFP
+Q0FROEFNSUlCQ2dLQ0FRRUF6TGd5azVLTzYrajlkMXVkMGlsSkFyclozV2h3L3c5d0V6SEI5eVh
+3RU5SYTVmbTVBYlJ1a01GNWI2VkdlS3pENkxadUw5K3RmZEZmV3lQY2pJKytnR055d3pSbUVIS3
+BUbnpQMXQ2Tnl1WEtmbTRuQlZBYmxzdWdTdzhZNURFWFJmVHFJTGdCV04vcFo0ekdsaWZFQUxNY
+0dBczdBRGNqbnY3Yi90TTJ3eHI5ckh4c0N2VzRIdmx6UWFzSzhRcjFDcktnVDBFSTY2clNYQ0hl
+cC91SU9ORFdwMFcyT2VsTWxadE02QUFqV1hSTEdjc2hQSUh1SytaTGZBRnhXdG9Hb25mNnFOOXl
+wb3MyQjE4RC9FRmE4V0hPTjYyZVlLVDBrVzNqQlZhM3lQRWtSd2tkRGpEdS8zQ1B6eW1oZjNXRl
+l3eHBiNHQzNW9XYi9xVVhHVklkdndJREFRQUJveTR3TERBZkJnTlZIU01FR0RBV2dCU3grT3ErU
+k8zeC9GbXlDcCtqY21mT0grRm45VEFKQmdOVkhSTUVBakFBTUEwR0NTcUdTSWIzRFFFQkN3VUFB
+NElCQVFBZ0tBVFhsblMrcFB0QWlSSVlHdHlkVlU1Vmk3QXErRDZRVzA3dUZxY0I3dkJoZGROM3l
+YMmxWVmN3cFROSnpodjhVQ00rbURNdmxtc1JWS1Z0TW9vNWZIZklJOTIvV284clV6MVJQK3loeU
+NrMFZ6OEkxMXYrYmpMd1Z1ci9hZ0MvczVSZjBtNjZwTk5qRlo5SjNTMk4zbENoWFl3ejJ2dkE4c
+GRBWXZXVHU5ZzV1NEZNRnFsc2FMd01HQytXYUEwZzNLWXpSa2RXUnkxdmQyM2hMVFVjVnNXTTh3
+cGdaMTF3RUdFMWtoY2EvU2QwbUNVMkhHNXZJYnFGZlRqQTZ0bzBmWTA3Q0U1ZkQ4YVIzVWNYak5
+kdW9zVk81MlpxQ1g1U2FicmhGUzNBR0hGUmpwRm5JNUxaZXNwaUNYU0E4U3Yza09TQ1NSUUtxRm
+Jpd1NGTThaamciXSwiYWxnIjoiUlMyNTYifQ.ew0KICAibm9uY2UiOiAiOTFkYzI4YWYtNGM5NS
+00N2YwLTk5MTMtODdmODE2MmIxNzA4LTE3MDk3MTc3NDk4NjIiLA0KICAiY2xpZW50SWQiOiAiQ
+TExMjI2Ig0KfQ.qPsK_S-76JrYRerFsbl8SqVSNQTcUAd1o496mE_5XOf-
+bw1BgLd3bC33Vxrfqs0lpxSm5hyiKpMYkaz-
+GPWXt9meoHozRNIFAGimWukE26pH7VJD4vJqfWN784k82XwHRLv1UVoPkzfmtRiFYTwI2hGc1B7
+AfY_I6cP5uGMBOY3Kqok0hhlfQyBM_EIoSRNSW3JBAzHQea-
+EIm55oXkvXo_2lwsmGHXngFA6qhDbzuHJ2mkItor2HJjZTbND9sxN-
+X1ZgSuM7i6izvxxTuSaQMWAfTrEv9d2BzG1ZT1zcFBZVXLAza13Bh74P5DhWsoOR8q0EJvgMvbK
+nWaX-H-c_A 
+تکهکد زیر  به زبان جاوا عملی ات  ساخت توکن از روی   Nonce  را انجام میدهد. لازمبهذکر است تمام ی  
+این فرآیندها در کی ت توسعه نرمافزاری جاوا و .net پی ادهسازی شدهاند و ا ین تکه کد صرفا جهت آشنا یی بهتر با 
+فرآیند  تولید  توکن  JWT  قرار داده شده است. همچنین کلید خصوصیای که فرآیند امضا با آن انجام شده در 
+قسمت پیوست قرار گرفته است: 
+Loading Signature Private Key in PKCS#8 format **/ 
+String privateKeyPath = "path/to/private-key.pem"; 
+KeyFactory keyFactory = KeyFactory.getInstance("RSA"); 
+final PEMParser pemParser = new PEMParser(new FileReader(privateKeyPath)); 
+final PrivateKeyInfo pemKeyPair = (PrivateKeyInfo) pemParser.readObject(); 
+
+===== PAGE 14 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۴۱ 
+ 
+final byte[] encoded = pemKeyPair.getEncoded(); 
+PrivateKey privateKey = keyFactory.generatePrivate(new 
+PKCS8EncodedKeySpec(encoded)); 
+ 
+/** Loading Certificate **/ 
+String certificatePath = "path/to/certificate.crt"; 
+CertificateFactory certificateFactory = 
+CertificateFactory.getInstance("X.509"); 
+X509Certificate certificate = (X509Certificate) 
+certificateFactory.generateCertificate(new 
+FileInputStream(certificatePath)); 
+ 
+/** Generate Signature Time **/ 
+String dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"; 
+DateTimeFormatter dateTimeFormatter = 
+DateTimeFormatter.ofPattern(dateFormat, Locale.ROOT); 
+String signatureTime = 
+LocalDateTime.now(ZoneOffset.UTC).format(dateTimeFormatter); 
+ 
+String payload = "{\"nonce\":\"91dc28af-4c95-47f0-9913-87f8162b1708-
+1709717749862\",\"clientId\":\"A11226\"}"; 
+ 
+/** Generating JWT **/ 
+final JsonWebSignature jws = new JsonWebSignature(); 
+ 
+jws.setPayload(payload); 
+jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256); 
+jws.setKey(privateKey); 
+jws.setCertificateChainHeaderValue(certificate); 
+jws.setHeader("sigT", signatureTime); 
+jws.setHeader("crit", new String[]{"sigT"}); 
+ 
+jws.sign(); 
+ 
+String jwt = jws.getCompactSerialization(); 
+در ابتدا کلی د  خصوصی  امضا به فرمت  PKCS#8  در شیء  privateKey  بارگزاری  می شود. سپس 
+گواهی  امضای  مودی  در قالب  یک  شیء  از نوع  X509Certificate  باز میشود. سپس تاریخ  امضا به فرمت  
+مشخص شده تولی د  میشود. در نهایت  با ساخت  header  درخواست و قرادادن آن در کنارpayload  داده  شده 
+و  با در اختیار قرار داشتن کلید خصوصی  امضا، توکن  jwt  ساخته میشود. جهت امضا ی  رشته و تولی د  jwt  در
+این  تکهکد از کتابخانهی  jose-4j  نسخهی  0.9.3  استفاده شده است. همچنین تکه کد زیر به زبان  NET  همین
+عملیات را انجا م میدهد:  
+namespace TaxCollectData.Sample; 
+using System.Globalization; 
+using System.Text.Json; 
+using System.Text.Json.Nodes; 
+using JWT.Algorithms; 
+using JWT.Builder; 
+
+===== PAGE 15 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+5 
+ 
+using Org.BouncyCastle.Crypto.Parameters; 
+using Org.BouncyCastle.OpenSsl; 
+using Org.BouncyCastle.Security; 
+ 
+internal class SignTest 
+{ 
+    public static void Main(string[] args) 
+    { 
+        // Loading Signature Private Key in PKCS#8 format 
+        var privateKeyPemReader = new 
+PemReader(File.OpenText("path/to/private-key.pem")); 
+        var privateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters) 
+privateKeyPemReader.ReadObject()); 
+         
+        // Loading Certificate  
+        var certPemReader = new PemReader(new 
+StreamReader("path/to/certificate.crt")); 
+        var certificate = 
+DotNetUtilities.ToX509Certificate((Org.BouncyCastle.X509.X509Certificate) 
+certPemReader.ReadObject()); 
+        var publicKey = DotNetUtilities.ToRSA((RsaKeyParameters) 
+DotNetUtilities.FromX509Certificate(certificate).GetPublicKey()); 
+ 
+        var payload = "{\"nonce\":\"91dc28af-4c95-47f0-9913-87f8162b1708-
+1709717749862\",\"clientId\":\"A11226\"}"; 
+ 
+        // Generating JWT  
+        var jws = JwtBuilder.Create() 
+            .WithAlgorithm(new RS256Algorithm(publicKey, privateKey)) 
+            .AddHeader(HeaderName.X5c, new[] 
+{Convert.ToBase64String(certificate.GetRawCertData())}) 
+            .AddHeader("sigT", DateTime.UtcNow.ToString("yyyy-MM-
+dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture))  
+            .AddHeader("crit", new[] {"sigT"}) 
+            .Encode(JsonSerializer.Deserialize<JsonNode>(payload)); 
+         
+        Console.WriteLine(jws); 
+    } 
+} 
+این کد ازپکیجهای زیر برای امضای بسته استفاده مینماید: 
+PackageReference Include="jose-jwt" Version="4.1.0" /> 
+<PackageReference Include="JWT" Version="10.0.2" /> 
+<PackageReference Include="System.Security.Cryptography.Cng" 
+Version="6.0.0-preview.4.21253.7" /> 
+<PackageReference Include="System.Security.Cryptography.X509Certificates" 
+Version="4.3.2" /> 
+<PackageReference Include="Portable.BouncyCastle" Version="1.9.0" /> 
+5- 1- 3-  استفاده از توکن تولید  شده در درخواست بعد ی 
+
+===== PAGE 16 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+6 
+ 
+حال باید  با استفاده از این  توکن هنگام ارائهی  درخواست بعدی  خود را به سرور معرف ی  نمائی م. بدی ن  
+منظور با ید  در سرآ یند 6  درخواستHTTP  ارسالی،  فی لد  Authorization  را برابر با "Bearer 
+[jwt token]"  قرار دهی م. مثلا فرض کن ید  میخواهی م  درخواست ی  برای  گرفتن اطلاعات سرور انجام   
+دهی م. ا ین  API  از طر یق   https://tp.tax.gov.ir/requestsmanager/api/v2/server-information  در
+دسترس است. 
+curl --location 'https://tp.tax.gov.ir/requestsmanager/api/v2/server-
+information' --header 'Authorization: Bearer eyJhbGciO....' 
+در صورتی  که در  Authorization  مقدار توکن به درستی  وارد شده باشد، امضا ی  توکن صحی ح  
+باشد ،  گواهی  امضا معتبر باشد ،  Nonce  هنوز معتبر باشد و تاکنون استفاده  نشده باشد، پاسخ به درخواست به شکل  
+زیر خواهد بود: 
+{ 
+  "serverTime": 1683985068801, 
+  "publicKeys": [ 
+    { 
+      "key": "MIICIjANBgkq...", 
+      "id": "6a2bcd88-a871-4245-a393-2843eafe6e02", 
+      "algorithm": "RSA", 
+      "purpose": 1 
+    } 
+  ] 
+} 
+بررسی امضای توکنJWS  بدین صورت است که هر یک از شرایط زیر برای صحت امضای بسته
+بررسی می شوند و در صورت وجود خطا در هر بخش صحت امضای بسته زیر سوال می رود و توکن فرستاده شده 
+مورد قبول واقع نمیشود:  
+1. ساختار کلی بستهی JWS (header،payload وsignature) ارسال شده صحیح باشد 
+2. امضای موجود در بستهی  JWS  با گواهی امضای فرستاده شده در قسمتheader  توکن ارسالی
+Verify شود 
+ 
+6 Header 
+
+===== PAGE 17 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+7 
+ 
+3. گواهی امضای فرستاده شده در header  توسط یکی از مراکز میان ی مورد اعتماد زیرسامانه ی 
+جمعآوری صادر شده باشد و امضای گواهی با یکی از گواهیهای موجود در مخزن  Trusted 
+Cert اعتبارسنجی وVerify شود 
+4. تاریخ انقضای گواهی امضا سپری نشده باشد 
+5. در صورت وجود فیلد CRL Distribution Point  در فیلدهای موجود در گواهی (قسمت 
+Extension  )استعلام لیست گواهیهای  ابطال  شده پیش از موعد از مرکز میانی مورد نظر گرفته  
+میشود و بررسی میشود گواهی مورد نظر جزو گواهیهای ابطال شدهی پیش از موعد نباشد.  
+6. در صورت وجود فیلد Authority Information Access  در فیلدهای موجود در گواهی 
+(قسمت  Extension)  و وجودAccess Method  برابر باOCSP، از آدرسOCSP  موجود در
+گواهی که آدرس سرور  OCSP  مرکزمیانی صادر کننده ی گواهی می باشد، وضعیت گواهی 
+استعلام گرفته میشود که گواهی دچار ابطال پیش از موعد نشده باشد.  
+6 - دریافت اطلاعات سرور 
+این  وبسروی س  اطلاعات سرور مانند  timestamp  وکلیدهای  عمومی  رمزگذاری  سامانه مودیان   را  
+برمیگرداند. همانطور که گفته شد فراخوانی   این  API  نی از  به احراز هویت  دارد و جهت فراخوانی  آن باید  توکن 
+JWT  در قسمتheader  درخواست در فیلد  Authorization  فرستاده شود. نحوهی  کار این  API  به صورت
+زیر است:  
+Get server-information - دریافت اطلاعات سرور 
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/server-information 
+Method GET 
+ورودی ندارد  
+خروجی 
+شیء Json دارای فی لدهای زیر: 
+• serverTime: برچسب زمانی سرور  
+• publicKeys: آرایه Json از کلی دهای عمومی رمزگذاری سرور هر یک شامل: 
+
+===== PAGE 18 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+8 
+ 
+o key: کلی د کد شده به فرمت  Base64 
+o id: شناسه کلید 
+o algorithm: فعلا برابر با"RSA" 
+o purpose: مقدار ثابت1 
+نمونه درخواست ارسالی و پاسخ آن: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/server-information' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGciOi...[JWT]...Jvl8fvHm0PKVA' 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+{ 
+  "serverTime": 1684055518885, 
+  "publicKeys": [ 
+    { 
+      "key": 
+"MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAxdzREOEfk3vBQogDPGTMqdDQ7t0oDh
+uKMZkA+Wm1lhzjjhAGfSUOuDvOKRoUEQwP8oUcXRmYzcvCUgcfoRT5iz7HbovqH+bIeJwT4rmLm
+FcbfPke+E3DLUxOtIZifEXrKXWgSVPkRnhMgym6UiAtnzwA1rmKstJoWpk9Nv34CYgTk8DKQN5j
+QJqb9L/Ng0zOEEtI3zA424tsd9zv/kP4/SaSnbbnj0evqsZ29X6aBypvnTnwH9t3gbWM4I9eAVQ
+hPYClawHTqvdaz/O/feqfm06QBFnCgL+CBdjLs30xQSLsPICjnlV1jMzoTZnAabWP6FRzzj6C2s
+xw9a/WwlXrKn3gldZ7Ctv6Jso72cEeCeUI1tzHMDJPU3Qy12RQzaXujpMhCz1DVa47RvqiumpTN
+yK9HfFIdhgoupFkxT14XLDl65S55MF6HuQvo/RHSbBJ93FQ+2/x/Q2MNGB3BXOjNwM2pj3ojbDv
+3pj9CHzvaYQUYM1yOcFmIJqJ72uvVf9Jx9iTObaNNF6pl52ADmh85GTAH1hz+4pR/E9IAXUIl/Y
+iUneYu0G4tiDY4ZXykYNknNfhSgxmn/gPHT+7kL31nyxgjiEEhK0B0vagWvdRCNJSNGWpLtlq4F
+lCWTAnPI5ctiFgq925e+sySjNaORCoHraBXNEwyiHT2hu5ZipIW2cCAwEAAQ==", 
+      "id": "6a2bcd88-a871-4245-a393-2843eafe6e02", 
+      "algorithm": "RSA", 
+      "purpose": 1 
+    } 
+  ] 
+} 
+7 - ارسال صورتحساب 
+فرآیند  ارسال صورتحساب هم مانند همهی   فرآیندها  در وبسرویس  جمعآوری  نی از  به احراز هویت  
+فراخوانی  کننده دارد. بنابراین  از تکرار این  مرحله صرفنظر می کنی م. فرض میکن ی م  عملی ات  گرفتن  nonce،
+امضای  آن و ساخت توکن برای  هر درخواست انجام میشود. فرض کن ی د   یک  صورتحساب  الکترون یک  در اخت ی ار  
+داریم. برا ی  آشنایی  با صورتحساب الکترون ی کی  و ف ی لدهای  آن به سند  «
+
+===== PAGE 19 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+9 
+ 
+الکترونی کی »  مراجعه نمائ ید. صورتحساب به فرم  یک   JSON  دارای   header  (اطلاعات مربوط به خر یدار  و 
+فروشنده و اطلاعات کلی  صورتحساب)،  body  (لی ست  اقلام موجود در صورتحساب) و  payments (اطلاعات
+مراحل پرداخت صورتحساب) میباشد.  
+در  ابتدا باید  با استفاده از شماره منحصربهفرد مالی اتی،  صورتحساب را به شکل  یکتا  مشخص نمائی م. سپس 
+باید  صورتحساب  را امضا کنیم و بستهی  JWS  تولید نمائیمدر مرحلهی  بعدی  باید  از  صورتحساب  امضا شده،  به 
+وسی له  کلید  عمومی  سازمان (که از طری ق   GET server-information  دریافت  م یگردد)  بستهی رمزشدهی 
+JWE ساخته شودو سپس برای وبسرویس جمعآوری ارسال شود.  
+7- 1-  جزئیات فرآیند ارسال صورتحساب 
+7- 1- 1-  تولید شمارهی منحصربه فرد مالیاتی TaxId 
+برای  آشنایی  با چگونگی  تولید  شماره مالیات ی  به سند  «یکتا ی  حافظه مال ی ات ی  و شماره منحصر  
+به فرد مالی اتی »  مراجعه نمایید. همچن ی ن  در کیت  توسعه نرم افزاری  (SDK) به زبانهای  جاوا و . net  توابعی  جهت 
+تولی د  شماره مال ی اتی  مطابق با الگوریتمهای  گفته شده پی ادهسازی  شده که نحوهی  استفاده از آن ها شرح داده خواهد 
+شد.  
+7- 1- 2-  امضای صورتحساب 
+امضای  صورتحساب نی ز  مانند امضای  توکن  JWT  می باشد   بدین  صورت که برای  امضا ی  صورتحساب 
+باید یک بستهی JWS ساخته شود که ساختار آن مانند جدول زیر باشد: 
+امضای صورتحساب – JWS 
+Header 
+یک شیء JSON دارای فی لدهای زیر: 
+• alg: الگوریتم  امضا: RS256 
+• x5c: لی ست ی که شامل گواهی امضای مودی  باشد. کد شده به فرمت Base64 
+• sigT: زمان امضای توکن 
+Format:  yyyy-MM-dd'T'HH:mm:ss'Z' 
+Example: 2023-05-13T10:44:47Z 
+
+===== PAGE 20 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۰ 
+ 
+• crit: لی ستی  از ف ی لدهای  ضرور ی  در قسمت  Header. تنها شامل رشتهی  "sigT " 
+Payload شیء JSON  صورتحساب  
+Signature 
+ورودی الگوریتم امضا 
+ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || 
+BASE64URL(JWS Payload)) 
+الگوریتم: RSASSA-PKCS1-v1_5 using SHA-256 
+کلید خصوصی: کلید خصوصی متناظربا گواهی فرستاده شده در بخش Header 
+ساختار بستهی  JWS  صورتحساب دقیقا مانند توکنJWS  میباشد. با این تفاوت که  payload  آن
+JSON  صورتحساب میباشد. توجه کنید که رشتههای  Header  وPayload  باید  به فرمت  utf8  بوده وبرای  
+امضا و تولید بسته JWS به فرمت Base64URL کد شوند. 
+به عنوان نمونه فرض کن ی د Json صورتحساب ما بعد از تولی د شماره مالی ات ی به شکل زیر  است:  
+{"header":{"taxid":"A1121604C220002F095011","inno":"49321217","indatim":168
+3997837988,"inty":1,"inp":1,"ins":1,"tins":"14003778990","tob":2,"bid":"101
+00302746","tinb":"10100302746","tprdis":20000,"tdis":500,"tadis":19500,"tva
+m":1755,"todam":0,"tbill":21255,"setm":2},"body":[{"sstid":"2710000138624",
+"sstt":"سرسیلندر قطعات صنعت فولاد 
+سازی",mu":"164","am":2,"fee":10000,"prdis":20000,"dis":500,"adis":19500,"v
+ra":9,"vam":1755,"tsstam":21255}],"payments":[]} 
+حالیک شیء  JWS میسازیم که Header آن مقدار زیر  باشد:  
+{"crit":["sigT"],"sigT":"2024-03-
+06T13:16:11Z","x5c":["MIIE7DCCA9SgAwIBAgISAM4ybFjIYlezw/6Ly2CQYYNBMA0GCSqGS
+Ib3DQEBCwUAMIG7MQswCQYDVQQGEwJJUjEZMBcGA1UECgwQTm9uLUdvdmVybm1lbnRhbDEkMCIG
+A1UECwwbQW1uYWZ6YXIgR29zdGFyLWUgU2hhcmlmIENvMTQwMgYDVQQLDCtQYXJzU2lnbiBJbnR
+lcm1lZGlhdGUgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MTUwMwYDVQQDDCxQYXJzU2lnbiBQcml2YX
+RlIEludGVybWVkaWF0ZSBTaWx2ZXIgQ0EgLSBHMzAeFw0yMzEwMTgwNjQyMTZaFw0yNDEwMTIwN
+jQyMTZaMIGyMSAwHgYDVQQDDBdBbGkgU2hpcm1vaGFtYWRpIFtTaWduXTELMAkGA1UEBhMCSVIx
+DzANBgNVBCoMBti52YTbjDETMBEGA1UEBwwK2KrZh9ix2KfZhjEVMBMGA1UECgwMVW5hZmZpbGl
+hdGVkMRMwEQYDVQQFEwowMDIzNDU3NzA4MRMwEQYDVQQIDArYqtmH2LHYp9mGMRowGAYDVQQEDB
+HYtNuM2LEg2YXYrdmF2K/bjDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAIm7YPJLA
+bIyHftOB9SsMps1OeFMJ5+bRZLa4dE5cf404Qb2K6m+ITxT8sDO09mDLqbfxTCq1+ehlbAl/yug
+XdF5+rGYQYX/yaJf+vkaAq162vqdRvbVvkhNr1XI2rI+sXfGJBcGnceskoVf7rm+RTciOmAA3Zh
+cjdU3jFmU1/Am8VBJ83kK8Qf8I6ZtFZhHL1Yp051xLVs5QI4/lwmKxkEkmG+VgGV22Mkve3Yw1P
+oeMyc0O110BvFd3iiEnAUtHuIKF6cFwWia0hIJLvd+s/W7LuVQMNVYeu+J64zDqYBwDaSt4L+eo
+fT6ksg6aslQSZdf/7VGyDGIqcjTet1E/C8CAwEAAaOB8DCB7TAdBgNVHQ4EFgQUepvjaOKnzm8N
+4C/+g1F4neodzaMwHwYDVR0jBBgwFoAUFMcOIHyJ0RZ/yrlp6IfJLEaC+lUwNAYDVR0fBC0wKzA
+poCegJYYjaHR0cDovL2wyLnBhcnNzaWduY2EuaXIvUFNfTDJDQS5jcmwwDgYDVR0PAQH/BAQDAg
+bAMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMCMDcGCCsGAQUFBwEBBCswKTAnBggrBgEFBQcwAYYba
+HR0cDovL2wyLnBhcnNzaWduY2EuaXI6ODEvMBQGA1UdIAQNMAswCQYHYIJsZQEBAjANBgkqhkiG
+9w0BAQsFAAOCAQEAcw2hdV1YN8xHXsQq4X6YWtgyUsK92CTILb/j2jYfIGXlwLCYxR6zPFuoqmj
+VG9Txs3NEPQirsVwqoIUzljTZnBU/WlPjeqPyWadQooRvg/64Ahd88A8YJf3Yvv1Dax8rUANX+A
+Qd093OxAr7hfCISTHFmhhw5GoJ153vh0idhekeK6//iwvLugPA9k0Qu0WObWsJ2Ctj2zWhCXMdz
+
+===== PAGE 21 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۱ 
+ 
+IajqkpEmyBJxe4yj9ZGyezjSmPb+khDgvEsbrOPcWy3WTsx80S3Shphl8ywNQTRd6OximDXs14+
+lL0BlZav6o0DpTlkF40OmoPkoZwQkJNxBrNrKWDeK39vRR56yPP4p+04Ww=="],"alg":"RS256
+"} 
+و سپس آن را با استفاده از کلی د  خصوصی  که در اخت ی ار  داریم  امضا میکنی م. حال صورتحساب امضا 
+شده به صورت یک JWS در میآید: 
+eyJjcml0IjpbInNpZ1QiXSwic2lnVCI6IjIwMjQtMDMtMDZUMTM6MTY6MTFaIiwieDVjIjpbIk1
+JSUU3RENDQTlTZ0F3SUJBZ0lTQU00eWJGaklZbGV6dy82THkyQ1FZWU5CTUEwR0NTcUdTSWIzRF
+FFQkN3VUFNSUc3TVFzd0NRWURWUVFHRXdKSlVqRVpNQmNHQTFVRUNnd1FUbTl1TFVkdmRtVnlib
+TFsYm5SaGJERWtNQ0lHQTFVRUN3d2JRVzF1WVdaNllYSWdSMjl6ZEdGeUxXVWdVMmhoY21sbUlF
+TnZNVFF3TWdZRFZRUUxEQ3RRWVhKelUybG5iaUJKYm5SbGNtMWxaR2xoZEdVZ1EyVnlkR2xtYVd
+OaGRHVWdRWFYwYUc5eWFYUjVNVFV3TXdZRFZRUUREQ3hRWVhKelUybG5iaUJRY21sMllYUmxJRW
+x1ZEdWeWJXVmthV0YwWlNCVGFXeDJaWElnUTBFZ0xTQkhNekFlRncweU16RXdNVGd3TmpReU1UW
+mFGdzB5TkRFd01USXdOalF5TVRaYU1JR3lNU0F3SGdZRFZRUUREQmRCYkdrZ1UyaHBjbTF2YUdG
+dFlXUnBJRnRUYVdkdVhURUxNQWtHQTFVRUJoTUNTVkl4RHpBTkJnTlZCQ29NQnRpNTJZVGJqREV
+UTUJFR0ExVUVCd3dLMktyWmg5aXgyS2ZaaGpFVk1CTUdBMVVFQ2d3TVZXNWhabVpwYkdsaGRHVm
+tNUk13RVFZRFZRUUZFd293TURJek5EVTNOekE0TVJNd0VRWURWUVFJREFyWXF0bUgyTEhZcDltR
+01Sb3dHQVlEVlFRRURCSFl0TnVNMkxFZzJZWFlyZG1GMksvYmpEQ0NBU0l3RFFZSktvWklodmNO
+QVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUltN1lQSkxBYkl5SGZ0T0I5U3NNcHMxT2VGTUo1K2J
+SWkxhNGRFNWNmNDA0UWIySzZtK0lUeFQ4c0RPMDltRExxYmZ4VENxMStlaGxiQWwveXVnWGRGNS
+tyR1lRWVgveWFKZit2a2FBcTE2MnZxZFJ2YlZ2a2hOcjFYSTJySStzWGZHSkJjR25jZXNrb1ZmN
+3JtK1JUY2lPbUFBM1poY2pkVTNqRm1VMS9BbThWQko4M2tLOFFmOEk2WnRGWmhITDFZcDA1MXhM
+VnM1UUk0L2x3bUt4a0VrbUcrVmdHVjIyTWt2ZTNZdzFQb2VNeWMwTzExMEJ2RmQzaWlFbkFVdEh
+1SUtGNmNGd1dpYTBoSUpMdmQrcy9XN0x1VlFNTlZZZXUrSjY0ekRxWUJ3RGFTdDRMK2VvZlQ2a3
+NnNmFzbFFTWmRmLzdWR3lER0lxY2pUZXQxRS9DOENBd0VBQWFPQjhEQ0I3VEFkQmdOVkhRNEVGZ
+1FVZXB2amFPS256bThONEMvK2cxRjRuZW9kemFNd0h3WURWUjBqQkJnd0ZvQVVGTWNPSUh5SjBS
+Wi95cmxwNklmSkxFYUMrbFV3TkFZRFZSMGZCQzB3S3pBcG9DZWdKWVlqYUhSMGNEb3ZMMnd5TG5
+CaGNuTnphV2R1WTJFdWFYSXZVRk5mVERKRFFTNWpjbXd3RGdZRFZSMFBBUUgvQkFRREFnYkFNQl
+lHQTFVZEpRRUIvd1FNTUFvR0NDc0dBUVVGQndNQ01EY0dDQ3NHQVFVRkJ3RUJCQ3N3S1RBbkJnZ
+3JCZ0VGQlFjd0FZWWJhSFIwY0Rvdkwyd3lMbkJoY25OemFXZHVZMkV1YVhJNk9ERXZNQlFHQTFV
+ZElBUU5NQXN3Q1FZSFlJSnNaUUVCQWpBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQWN3MmhkVjF
+ZTjh4SFhzUXE0WDZZV3RneVVzSzkyQ1RJTGIvajJqWWZJR1hsd0xDWXhSNnpQRnVvcW1qVkc5VH
+hzM05FUFFpcnNWd3FvSVV6bGpUWm5CVS9XbFBqZXFQeVdhZFFvb1J2Zy82NEFoZDg4QThZSmYzW
+XZ2MURheDhyVUFOWCtBUWQwOTNPeEFyN2hmQ0lTVEhGbWhodzVHb0oxNTN2aDBpZGhla2VLNi8v
+aXd2THVnUEE5azBRdTBXT2JXc0oyQ3RqMnpXaENYTWR6SWFqcWtwRW15Qkp4ZTR5ajlaR3llemp
+TbVBiK2toRGd2RXNick9QY1d5M1dUc3g4MFMzU2hwaGw4eXdOUVRSZDZPeGltRFhzMTQrbEwwQm
+xaYXY2bzBEcFRsa0Y0ME9tb1Brb1p3UWtKTnhCck5yS1dEZUszOXZSUjU2eVBQNHArMDRXdz09I
+l0sImFsZyI6IlJTMjU2In0.eyJoZWFkZXIiOnsidGF4aWQiOiJBMTEyMTYwNEMyMjAwMDJGMDk1
+MDExIiwiaW5ubyI6IjQ5MzIxMjE3IiwiaW5kYXRpbSI6MTY4Mzk5NzgzNzk4OCwiaW50eSI6MSw
+iaW5wIjoxLCJpbnMiOjEsInRpbnMiOiIxNDAwMzc3ODk5MCIsInRvYiI6MiwiYmlkIjoiMTAxMD
+AzMDI3NDYiLCJ0aW5iIjoiMTAxMDAzMDI3NDYiLCJ0cHJkaXMiOjIwMDAwLCJ0ZGlzIjo1MDAsI
+nRhZGlzIjoxOTUwMCwidHZhbSI6MTc1NSwidG9kYW0iOjAsInRiaWxsIjoyMTI1NSwic2V0bSI6
+Mn0sImJvZHkiOlt7InNzdGlkIjoiMjcxMDAwMDEzODYyNCIsInNzdHQiOiLYs9ix2LPbjNmE2Yb
+Yr9ixINmC2LfYudin2Kog2LXZhti52Kog2YHZiNmE2KfYryDYs9in2LLbjCIsIm11IjoiMTY0Ii
+wiYW0iOjIsImZlZSI6MTAwMDAsInByZGlzIjoyMDAwMCwiZGlzIjo1MDAsImFkaXMiOjE5NTAwL
+CJ2cmEiOjksInZhbSI6MTc1NSwidHNzdGFtIjoyMTI1NX1dLCJwYXltZW50cyI6W119.AVPw0w2
+IG7BJ5zglQYrP_vvBT1wX0eB4ZP77vvQkTN2At-zb8hpFeqG-
+uqui99cvR4i27GVnKcMpLBNVmMrL4FODTXqKn053bJ8oPJhbnUFhIkOAcoRmPUOtmO5jsWvocAL
+07Bh-m8B7nQG7d-
+RLEXViwbaCmMI7hzMCBzMm3P0Sr2cBVDrK8FUR_8VHb2l9gUm52A4Wy8i4moHc1Gi_65O3vrNX9
+bN3DiJSS_me5WOisE0GjglB3zHTMzE6MAZMpBbVJYfJOK-h-
+RKJaWLAlIvZYbYmhVMbfuxFB5Q9DlqDsvc0ie4Nn3Qs0sMVPcNO335ANSMu7wgFPqYmEK5aEw 
+
+===== PAGE 22 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+22 
+ 
+توجه  کنید  که   بررسی  اعتبار  امضا  و  گواهی  امضا  کنندهی  صورتحساب  نیز  عینا  همانند  بررسی  توکن  
+JWS  میباشد   و  در  کنار  بررسی  گواهی  امضای  صادرکنندهی  صورتحساب  و  تاریخ  انقضای  گواهی،  از  سرور  
+OCSP  و  CRL  صادرکنندهی  گواهی  استعلامات  لازم  برای  اطمینان  نسبت  به  اعتب ار  و  صحت  گواهی  گرفته  
+میشود.  
+لازم به ذکر است گواهی استفاده شده در فرآیند امضای صورتحساب می بایست معتبر بوده و کد  
+ملی/شناسه ملی موجود در گواهی7  دسترسی ارسال صورتحساب برای شناسه یکتای حافظه مالیاتی مربوطه را
+داشته باشد.  
+7- 1- 3-  رمزگذاری صورتحساب 
+در  مرحلهی  بعد باید  صورتحساب امضاشده را رمزگذاری   کن یم. این  کار باعث میشود  هی چ  شخص  
+دیگری  به جز سرور سامانهی  مودیان  توانایی   بازکردن و مشاهده محتویات   صورتحساب را نداشته باشد. الگوریتم  
+رمزگذاری  مورد استفاده در ای ن  مرحله  AES256-GCM  (AES/GCM/NoPadding) میباشد  و کلید  AES  
+نی ز  از  طریق   الگوریتم  RSA-OAEP-256  (RSAES OAEP using SHA -256 and MGF1 with 
+SHA-256  )رمز م یشود  که ا ین  فرآیند  بر اساس استاندارد  JWE  انجام م یشود.  الگوریتم رمزگذاری  
+AES256-GCM  دارای4  ورودی و2  خروجی است. ورودیهای الگوریتم عبارتند از محتوای بسته یا همان 
+payload، کلید متقارن، iv  و داده اضافی احراز هویت AAD   (Additional Authentication Data  .)
+خروجیهای الگوریتم عبارتند از بستهی رمزشده و تگ احراز هویت (Authentication tag  .)ابتدایک  کلید   
+256  بیت ی  AES  به همراه96  بی ت  iv  (یا  همان  Initial Vector) تولید  میشود. داده اولیه  AAD  هم از روی
+header  ساخته میشود  و  در کنار محتوای بسته یا همان  Payload  (رشتهی  JWS  صورتحساب امضا شده)  به 
+عنوان ورودی به الگوریتم داده میشود تا داده رمز شده و  Authentication Tag  محاسبه شود. سپس خود کلید   
+با الگوریتم  RSA  و به وسی له  کلی د  عمومی   سازمان رمز میشود. در نهایت  صورتحساب رمزشده در کنار کلی د  
+AES  رمز شده، شناسه کلی د  عمومی  سازمان،  iv  و تگ شناسایی،  یک  بسته  JWE  را تشکی ل  میدهند  که میتوان  
+آن را برای  وبسرویس سامانهی مودیان ارسال نمود. 
+ 
+7 فیلدSERIALNUMBER در قسمتSUBJECT  گواهی امضاء 
+
+===== PAGE 23 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+23 
+ 
+ساختار شیءJWE : 
+بستهی رمز شده – JWE 
+Header 
+سرآیند 
+یک شیء Json دارای  فی لدها ی زیر:  
+• alg: مقدار"RSA-OAEP-256" 
+• enc: مقدار"A256GCM" 
+• kid: شناسهکلید عمومی رمزگذاری سامانه مودیان 
+نمونه: 
+{"alg":"RSA-OAEP-256","enc":"A256GCM","kid":"6a2bcd88-
+a871-4245-a393-2843eafe6e02"} 
+Encrypted 
+Symmetric 
+Key 
+کلید متقارن رمز
+شده  
+کلید متقارن  رمزگذاری  AES  به طول32  بایت256  بیت) را با استفاده از الگوریتم
+RSA-OAEP-256  (RSAES OAEP using SHA-256 and MGF1 with 
+SHA-256  )با کل ید  عموم ی  رمزگذاری  سامانه مود یان  به طول  4096  بی ت،  رمز  
+میکنیم. کلید رمز شده  512  بایت طول دارد  که  Base64URL Encoded  آن رادر  
+این قسمت قرار میدهیم.  
+Initial Vector  
+Encode  شدهی  12  بایت  (96  بیت  iv  به فرمتBase64URL  که رشتهای به طول 
+16 کاراکتر میشود. 
+Payload 
+محتوای رمز
+شده  
+رشتهی  JWS  صورتحساب امضا شده   که با استفاده از کلید متقارن و با الگوریتم  
+AES256-GCM رمز میشود. 
+Authentication 
+Tag 
+تگ شناسایی 
+تگی که به منظور اطمینان از دستکاری نشدن محتوای پیام رمز شده و کلیدها استفاده 
+میشود.  
+برای شناخت بیشتر نسبت به ساختار JWE سند RFC7516 را مشاهده کند 
+editor.org/rfc/rfc7516 -https://www.rfc 
+ مطابق این استاندارد قالب چ یدمان بسته JWE به صورت زیر است: 
+BASE64URL(UTF8(JWE Protected Header))  || '.' ||  
+BASE64URL(JWE Encrypted Key)  || '.' ||  
+BASE64URL(JWE Initialization Vector)  || '.' ||  
+BASE64URL(JWE Ciphertext)  || '.' ||  
+BASE64URL(JWE Authentication Tag) 
+
+===== PAGE 24 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۴ 
+ 
+مراحل رمزگذاری صورتحساب: 
+سرآیند JWE  به فرمت utf-8 برابر است با:  
+{"alg":"RSA-OAEP-256","enc":"A256GCM","kid":"6a2bcd88-a871-4245-a393-
+2843eafe6e02"} 
+کهEncode  شده آن به فرمتBase64URL میشود: 
+eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiNmEyYmNkODgtYTg
+3MS00MjQ1LWEzOTMtMjg0M2VhZmU2ZTAyIn0 
+توجه کنید که رشتهی سرآیند (header) حتما باید به فرمتutf-8 باشد 
+حال یک کلید متقارن تولید میکنیم که Encode شده آن به فرمتBase64URL برابر است با:  
+_hm__fdwWlcK2FiFuuOHcRHqvKeYrd9_tzAdUI9IK5E 
+سپس این کلید را  با کلی د  عمومی  رمزگذاری  سامانه مودیان  به طول  4096  بی ت،  رمز میکنیم.  این کلید از  API  
+دریافت اطلاعات سرور دریافت میشود و مقدار آن به فرمت Base64 برابر است با 
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAxdzREOEfk3vBQogDPGTMqdDQ7t0oDhu
+KMZkA+Wm1lhzjjhAGfSUOuDvOKRoUEQwP8oUcXRmYzcvCUgcfoRT5iz7HbovqH+bIeJwT4rmLmF
+cbfPke+E3DLUxOtIZifEXrKXWgSVPkRnhMgym6UiAtnzwA1rmKstJoWpk9Nv34CYgTk8DKQN5jQ
+Jqb9L/Ng0zOEEtI3zA424tsd9zv/kP4/SaSnbbnj0evqsZ29X6aBypvnTnwH9t3gbWM4I9eAVQh
+PYClawHTqvdaz/O/feqfm06QBFnCgL+CBdjLs30xQSLsPICjnlV1jMzoTZnAabWP6FRzzj6C2sx
+w9a/WwlXrKn3gldZ7Ctv6Jso72cEeCeUI1tzHMDJPU3Qy12RQzaXujpMhCz1DVa47RvqiumpTNy
+K9HfFIdhgoupFkxT14XLDl65S55MF6HuQvo/RHSbBJ93FQ+2/x/Q2MNGB3BXOjNwM2pj3ojbDv3
+pj9CHzvaYQUYM1yOcFmIJqJ72uvVf9Jx9iTObaNNF6pl52ADmh85GTAH1hz+4pR/E9IAXUIl/Yi
+UneYu0G4tiDY4ZXykYNknNfhSgxmn/gPHT+7kL31nyxgjiEEhK0B0vagWvdRCNJSNGWpLtlq4Fl
+CWTAnPI5ctiFgq925e+sySjNaORCoHraBXNEwyiHT2hu5ZipIW2cCAwEAAQ== 
+و حاصل رمز شدهی کلید متقارن با کلید عمومی  به فرمت  Base64URL  سازمان میشود.  قابل توجه است که 
+خروجی رمز شده الگوریتم RSA-OAEP-256 با ورودهای یکسان، متقاوت خواهد بود: 
+lRs_vcZlauJs4VwED3wZGr3wJDbg8It9zBStuJgqf7TiGs3kUCSulPwA6jRA-
+8xuHTpNtKr1w0hsNbUhsx-
+3BL5zGaDzsSekA1AZVevVy2qOrfId6OxLOb81SpVnSRR_K3jRHDWfH_ZDgZqMoM2mv6qFvb8GgG
+FV59_jIkhctX73Y6iqe3NCask2CT0Ine3SUFVxt_OBqnBCwgDLrauGyisQbpVN1JJRjsWPeyXA0
+0WvlECnRSLS93-prnMrfLTU_JHUyU304-cq7gVu7OATP1NB78L8m0-
+MiIF_tr0mpbaEneOLDbimNYt2UVgn1thJsvh5Na30GKY5t-ISHoWhX-
+DvVHp3KTEpp0bkC8IczZt-jg-
+2vdYhyM7Sz1H0c9w2EvSSryYsAVonOojl4yWeaNhP_7mk09hgu1MUkr91Tfr-
+U1k3zFHyCClfJzHj3t3uebS2mFDEyuao7K4omC335_VYsCi6kRSU421AW1_8V21RxaS2VDBQbgo
+Cqr3UQQxsoSRIG3v1-OBgTgZ9slEGZnEihaptab-
+7IeqnXIbhZNA8Onzy0wKW2S6r8M2eDd01QhGaDPGXcdWtOpC-Q-
+
+===== PAGE 25 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+25 
+ 
+cvu9MJTp4MRDx5dYe2rRQaI_A7WS5vJGkjwdRRpfhaJhGoXA7Wc6eUmB_UFOvPfsGQdFXPBUB3v
+h6jPfsER6hnXjU 
+مقدارIV تولید شده برایرمزگذاری محتوای اصلی با کلید AES به فرمتBase64URL برابر است با 
+75ZoCO0VRqIWRyAs 
+همچنین برای ایجاد تگ شناسایی نیاز به داده اضافی احراز هویت یا همان AAD  (Additional 
+Authenticated Data)  داریم که مقدار آن از طریق محاسبه مقدارASCII  سرآیندHeader  )Encode  شده
+به فرمت Base64URL به دست میآید: 
+Header: {"alg":"RSA-OAEP-256","enc":"A256GCM","kid":"6a2bcd88-a871-4245-
+a393-2843eafe6e02"} 
+Base64URL(Header):eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIiwia2lkI
+joiNmEyYmNkODgtYTg3MS00MjQ1LWEzOTMtMjg0M2VhZmU2ZTAyIn0 
+AAD = ASCII(Base64URL(Header)): [101, 121, 74, 104, 98, 71, 99, 105, 79, 
+105, 74, 83, 85, 48, 69, 116, 84, 48, 70, 70, 85, 67, 48, 121, 78, 84, 89, 
+105, 76, 67, 74, 108, 98, 109, 77, 105, 79, 105, 74, 66, 77, 106, 85, 50, 
+82, 48, 78, 78, 73, 105, 119, 105, 97, 50, 108, 107, 73, 106, 111, 105, 78, 
+109, 69, 121, 89, 109, 78, 107, 79, 68, 103, 116, 89, 84, 103, 51, 77, 83, 
+48, 48, 77, 106, 81, 49, 76, 87, 69, 122, 79, 84, 77, 116, 77, 106, 103, 
+48, 77, 50, 86, 104, 90, 109, 85, 50, 90, 84, 64, 121, 73, 110, 48] 
+محتوای بسته که همان صورتحساب امضا شده است را با کلید متقارن تولید شده و الگوریتم  AES256-GCM  
+رمز میکنیم و حاصل به فرمت Base64URL برابر است با 
+GiB15WaorEeK77gX1Tr-
+14lX0520tRcvrhp8D9cHCfYLTIonEo3MXYQ46Z8QTPv2ueCdiKztQDngTuczGGY3lve1cz-
+tHqeAJZ92UG9cjouMVE7IY29ML7OrzPy66GJsVb3BZnmIm6vDNEMf9AL8LH3y-
+H4rk9JmZjQbrRIU2AbmTGwRK0_FnQD660b-4nEMKfc51h9bk-
+dc8as3_OxFH2b0KxaiZDki8pDLumCFPQ9U9pfU7KUmkFlO9FGF3FpryGX5DzEE_YprotK6lcEr9
+f8U5ooHS_PF06pprnL_CkXtimdJEnJgghk-
+5XdZfdIMlR4ghYPDT_rfE0GjmroEaWOaoM3qXwDhdUFs1nb_48KAUOQY1ebgd9Ngi_ed-
+rh5l7TAj1wPCmqnPEY9SYIPeorurSwlMPPpI9NN-bjjBUhW1a4RxkCt5UeHDS--
+bvRkPqD5DaiOQg2RD7n8cm6pzHKcKO16WpXSSFhIjK1-
+l_kevoprXPIEHtWik3PBSXYWDzl5Gc_ET-aw2CF6xgWkUi-
+vw512_ySvs66grxGqubBQkOOxLLyUEmcxedPSCSs6g4eNqf-
+SES0yZ9NR4uBs3WBsqs2h0Ftrn5ZKniMDQKtoU0LJvscjXBso6ckAVuvjBilY4zKgr07FjJ9zn-
+9xkStotxms0czBo-
+fOsVunTuKypLBvTiwV4uykqUnsxbyOtuUvr10kLK1dma4F9q1gixRqfoMyn1o7seRDTRrTkBh_D
+krF-
+AzNhZG3o1TC5bHUtwN5crc2dw3FkS4UMe1unQkusFL44MRqY3qbn_iP4NY8X3bWTWtp3lkiFxKt
+ATTiZG_lvi5om1QwcA7a_mYQw47EjjvGTiSJQsfDM8d2WBlVDOV65xgcqy7OQVRPxfTo6jJu-
+X1MGd-RN2Lb_crLsnJGJ6kpdhqyF7ts_3gbWvryzKLJyDe2HM3izN6Kw0U4Ba-__YOMPV-
+mJECsVC5KUw9jRYhw6tdYSU41LXKRDnMyh-
+
+===== PAGE 26 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+26 
+ 
+cjRyuv4V347DOR280aGWsbqpqaDp4mdtkaABARhtO5BhbzzeSnHnEjTVZmdn8H5WifzGvqHCiGA
+z752CNNO00OwCbpVoW2Jcq78XndubsxsXzkcq0XvsDxnKzdBdRkoYyTEd5tMOdxUZw_tpbXNQZF
+FwAB4ph_FtoYC0j5OkGhEola6h7jguoFJu0CewloGSkvvqu2Ht4G9IfDkFs0tMTvdjHJJGWpDj9
+nQ_Mzn0QkKBPhGLM50yUtosIVd1FvrHCJuhkt3qsAP6OTHvgDswELnLMcOsoRB2qdVp6YSAOT3Z
+uRc6Bawwd5S78wd_o4ISW9pNMxNbHPueiXI_N48S9Zcb2ktwH6dB3rbkRwgXCEWcPheX8s5ik32
+5PbY5RAs29fj45yISSZ-
+6xlg9BwBXjg81TkNg18_6j0aI8ZZmDjL1EyjK0ojb9UpQUfjreakNAGhxSa5S_ethmI63Bs6_En
+XyzOKDP5sPmlyBgJ6RjXRSmVI8zqA1ETazPY93PYql_PqADQm48_Ocs1h_djjNNBHeA8ucYelX1
+T8tcD-ENwrvJw8_2u1A1DWX-
+FucPGQQLZc4PkwO4OCUeBlxDUsJFzedhX0cKEQr_b9zxhVT3C09yr3q6FyhqrYF892Kql06PmXB
+VEZrb-Q0piVZyozeordNJGRE0l6r8Al0hnc-KgUlkdZrxee_zzk9aV08CUOl-
+fvBRCGOR12v_EAcY17pnyfnCKmZH3u3Iq5D7-
+T3JHJSZz2NuUFrCok81L87X0YbRCscW164VAEsF1QolakktKt8cNRQwj_95rtt1Ka06Fdg6Q-
+VK9NskncKRKnlWcIQT6Ec6eTmr1Ng7JaQ7dqkEh_zThM8ifE-
+Ak6jVdpMiHZ4NvdlOndCPbi1r7zFNrUeRI0BK5PWfOJA90YAnMJ3B7DkrAMyLhZMkKXp4UjEZSQ
+hBhe_lnD9VxL3rZcmRqEctFVmsTnyRZY-
+pZlSx8gS__99WXrtNqD1lR3njeHWJsCi35GoJJwWh3BFCJvsyeQcmsIkkN4RdBrwj_B-
+ZpUKJn1gvho2E7PPkvuMpMPSWr1c1zptCpzamAY2pTjBgmQ5NWDnxN87fUZN9YaJYMcqD7kb-
+kooJuNWw7TcF-YPo_31UHHWd3mKzBVFUeYEqqJBA-
+9KroMQzfC7hc5QQkaA_oGVn0_8_AexX7fNDdXc6yRzM_msfGsbO6pMYegbEijS5F3DaopvpAmwd
+BbFlDRUIGSKpfODn9DNGB2BoqNn1mNPCu_BsqGuPvF3RzgxP-1MoCI3Xf7RxG1DYr-
+bTPsV6pyzinV5HaGSNRorYkXchaXhl19k4d9pfu_4uXeASFVG6WxzdpVwb_w769VQdVYL7KG0u4
+uC_MhWDH0w1DVEFySffBNPpZ6Z_lLYkbc8epocBH9HjJVFByP4gqVieVuDlX_tkK6QUwSPZTl36
+Be4uVf9luAJXZfn3IkMbj8KuRfLjwBE3N4MnjXbz4RHN5dZwaSJftRgYo_DaJPiqcGz1H3dB5B4
+i0A7bLA4H1TEIKLPom-
+A1GnpRruGdoF7dD3dhx8HOKUt7ny7zMrYQWI86bmRzubnMZmi87GguvCoCP7o7ATMJIGprSDmg-
+3TJ5FGyeXaNRZOlEP1Dhc6uh19Pm_PYP7l8tKg5Z_dGgnFWwJp2SDweU7kvWgEUePJVa-
+HKd7iiRGP-
+2cttS8ak4zlq_OjKkFRHi6A2uZ95Yg0dkWgBbHgCHbbuM5oBmIztFixmnHeoTrV3HPbBPw2jEX_
+XINhFVcYnfc1efs0Gh-
+jKA4wrCgStq5bXRhMC5degaoQ0Sb5eY_S_Ehpz1yoA_JYDHp6t8FfnSMTNbM9LfoBTgZDdlrRmw
+d2dBVJxzkbhTpXo4dpShFRsL1vs0GV3wdELBuzMb3UaTyu-
+rJy_DOblfPE8pmlC1NS2_WHrVXB0gJf91MaaIup_Fx7tJzSbqiNG9mFj6SQvMk0HvAyI195NpyF
+NX33x5NLFnF6l25mZdn6MY6nLPeNu9P1yEadZ8uXnMtwfrAOuN83yS2XZDWKHPYSJOaVcsGAjRr
+cGLpulp-dcx1g0XVQgNR0KzaH7J3zbRJ-Lqf7V6w9aYT1JnHk21bof2oGp9NaWN1-
+TqlOEvrAk3-
+EqzyCigOG5A2YZdoRR_1rlCxfNCXz0dtRwM07IX_kEEEKHTs4lk970YTSa_SdhYNMUN0QPBLkjT
+ts_YMnx8Y2wFumFy9Ji3K5o2GHB5nc0a1DioSi9gNEpFjv6pT_Tk9NDIFUBAwv8oV_qp41qFqSp
+A9g6G51madn0K6sonvAsRlDWNjxSBropg1stgWWCRe3Ucp_b9PhZht1rSuJsZynEqLCf9ZLn2lx
+fugLbIOdvaNZxkI2NtNHCv_CsiMFo76rC5SwCJ5uTtD64z53s2txbOPmhWpIGE63OKi3fQSZz5H
+ZdBbidIRcM3vCEseMNw1A27F7_BCIN6o9tZd-lX0Zkvh08Wts2d-c1Fs-
+x5ssLWeoMPpGvnFjZ9pQBD8EyK34JsA5qPTVjLOD62ZRph8PdkiJIoE0es4QMyleVbUe9rbscIN
+F2m5YSHiRWWM5MFSpDFmT67EtriseeWQnVNQTU31_chDRut92yv2G3seSa8HHMLW0Gmq7W7hUUG
+uxLbUSVv74U7_55vpQM0fuRhJ7khTbZioN-
+wBp32Zyy_phgMi5sOqV35lPoCzpZ7ueQwbsS6kvABCj2PjoeQL2trqrjcfkPfLPUKsETgkVrgvi
+jt55bzKmUG624fv1zJbgSt7t3rrPiVQyKflW0YJcx-
+39sKDICQeEFpQp_7gnf7LoKKVPAISDLSSCHJro6R5Vm74INsQQjGn-
+fH55R2sS4GVw74DfWF1k7wp9Upw3JjlgQ9MhRpVjUd98CprL-
+jjdn4k4CuHxZPXEoXEfkvC8PO4HmDN1Od-
+3ShVrilhJ1gLFpuM18l4OylUju9bhHEM8R28YL7ftgWvtzhMkdw3BPM05Uzo29xAsS_GZeDikFl
+
+===== PAGE 27 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+27 
+ 
+db2E7CoZu3evhnrMsk9KWGbbrxcAZDFR1zhNJHJBFVPpjpxgoXy6Br3LAtZBnu2l7Zt5mfAF08h
+EG0baz-MS0hPahcfoE3S7c5xPcV4wTmmX_r9pE_eg-
+6tyiylj5I9hOpgUMtogAgRSNA8VP5YLvoDv5D3eMhK_ZzTQtQGEQulpA86uPKjImusrAe4XAbFE
+fWIPZ--S6xkYacgCzGjqfAQOInmRLg_fOcmuy2atMbCX9Rf66rbGhOTwIY-HEBUAeIA9cY_AL-
+rb78ErzcKhRodnAN3XXq-rpA9709UjBiFm_SEPGEsA6HlmxDoPFubEt1g-
+36CxG41OLaKSEAXPUm105xNWUHS_xOaT55mq4DgaX_3cn8q6za9729x3PiGwtw0LhlhH-
+sezEb7wkSW0HjJoXkRKAMKD_HcaV7cAcwiMEvvE3sX_JQ 
+همچنین خروجی Authentication Tag  عملیاترمزگذاری  بسته با  iv  وaad  داده شده به فرمت  
+Base64URL برابر است با 
+m0uVEEEqSLHJRbG-xLOsyA 
+از کنار هم گذاشتن این مقادیر به ترتیبheader، کلید متقارن رمز شده با کلید سازمان،iv، بستهی رمز شده با 
+کلید متقارن تولید شده و تگ شناسایی بستهی JWE ساخته میشود: 
+eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiNmEyYmNkO
+DgtYTg3MS00MjQ1LWEzOTMtMjg0M2VhZmU2ZTAyIn0.lRs_vcZlauJs4VwED3wZGr3wJDbg8It9
+zBStuJgqf7TiGs3kUCSulPwA6jRA-8xuHTpNtKr1w0hsNbUhsx-
+3BL5zGaDzsSekA1AZVevVy2qOrfId6OxLOb81SpVnSRR_K3jRHDWfH_ZDgZqMoM2mv6qFvb8GgG
+FV59_jIkhctX73Y6iqe3NCask2CT0Ine3SUFVxt_OBqnBCwgDLrauGyisQbpVN1JJRjsWPeyXA0
+0WvlECnRSLS93-prnMrfLTU_JHUyU304-cq7gVu7OATP1NB78L8m0-
+MiIF_tr0mpbaEneOLDbimNYt2UVgn1thJsvh5Na30GKY5t-ISHoWhX-
+DvVHp3KTEpp0bkC8IczZt-jg-
+2vdYhyM7Sz1H0c9w2EvSSryYsAVonOojl4yWeaNhP_7mk09hgu1MUkr91Tfr-
+U1k3zFHyCClfJzHj3t3uebS2mFDEyuao7K4omC335_VYsCi6kRSU421AW1_8V21RxaS2VDBQbgo
+Cqr3UQQxsoSRIG3v1-OBgTgZ9slEGZnEihaptab-
+7IeqnXIbhZNA8Onzy0wKW2S6r8M2eDd01QhGaDPGXcdWtOpC-Q-
+cvu9MJTp4MRDx5dYe2rRQaI_A7WS5vJGkjwdRRpfhaJhGoXA7Wc6eUmB_UFOvPfsGQdFXPBUB3v
+h6jPfsER6hnXjU.75ZoCO0VRqIWRyAs.GiB15WaorEeK77gX1Tr-
+14lX0520tRcvrhp8D9cHCfYLTIonEo3MXYQ46Z8QTPv2ueCdiKztQDngTuczGGY3lve1cz-
+tHqeAJZ92UG9cjouMVE7IY29ML7OrzPy66GJsVb3BZnmIm6vDNEMf9AL8LH3y-
+H4rk9JmZjQbrRIU2AbmTGwRK0_FnQD660b-4nEMKfc51h9bk-
+dc8as3_OxFH2b0KxaiZDki8pDLumCFPQ9U9pfU7KUmkFlO9FGF3FpryGX5DzEE_YprotK6lcEr9
+f8U5ooHS_PF06pprnL_CkXtimdJEnJgghk-
+5XdZfdIMlR4ghYPDT_rfE0GjmroEaWOaoM3qXwDhdUFs1nb_48KAUOQY1ebgd9Ngi_ed-
+rh5l7TAj1wPCmqnPEY9SYIPeorurSwlMPPpI9NN-bjjBUhW1a4RxkCt5UeHDS--
+bvRkPqD5DaiOQg2RD7n8cm6pzHKcKO16WpXSSFhIjK1-
+l_kevoprXPIEHtWik3PBSXYWDzl5Gc_ET-aw2CF6xgWkUi-
+vw512_ySvs66grxGqubBQkOOxLLyUEmcxedPSCSs6g4eNqf-
+SES0yZ9NR4uBs3WBsqs2h0Ftrn5ZKniMDQKtoU0LJvscjXBso6ckAVuvjBilY4zKgr07FjJ9zn-
+9xkStotxms0czBo-
+fOsVunTuKypLBvTiwV4uykqUnsxbyOtuUvr10kLK1dma4F9q1gixRqfoMyn1o7seRDTRrTkBh_D
+krF-
+AzNhZG3o1TC5bHUtwN5crc2dw3FkS4UMe1unQkusFL44MRqY3qbn_iP4NY8X3bWTWtp3lkiFxKt
+ATTiZG_lvi5om1QwcA7a_mYQw47EjjvGTiSJQsfDM8d2WBlVDOV65xgcqy7OQVRPxfTo6jJu-
+X1MGd-RN2Lb_crLsnJGJ6kpdhqyF7ts_3gbWvryzKLJyDe2HM3izN6Kw0U4Ba-__YOMPV-
+mJECsVC5KUw9jRYhw6tdYSU41LXKRDnMyh-
+cjRyuv4V347DOR280aGWsbqpqaDp4mdtkaABARhtO5BhbzzeSnHnEjTVZmdn8H5WifzGvqHCiGA
+z752CNNO00OwCbpVoW2Jcq78XndubsxsXzkcq0XvsDxnKzdBdRkoYyTEd5tMOdxUZw_tpbXNQZF
+
+===== PAGE 28 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+28 
+ 
+FwAB4ph_FtoYC0j5OkGhEola6h7jguoFJu0CewloGSkvvqu2Ht4G9IfDkFs0tMTvdjHJJGWpDj9
+nQ_Mzn0QkKBPhGLM50yUtosIVd1FvrHCJuhkt3qsAP6OTHvgDswELnLMcOsoRB2qdVp6YSAOT3Z
+uRc6Bawwd5S78wd_o4ISW9pNMxNbHPueiXI_N48S9Zcb2ktwH6dB3rbkRwgXCEWcPheX8s5ik32
+5PbY5RAs29fj45yISSZ-
+6xlg9BwBXjg81TkNg18_6j0aI8ZZmDjL1EyjK0ojb9UpQUfjreakNAGhxSa5S_ethmI63Bs6_En
+XyzOKDP5sPmlyBgJ6RjXRSmVI8zqA1ETazPY93PYql_PqADQm48_Ocs1h_djjNNBHeA8ucYelX1
+T8tcD-ENwrvJw8_2u1A1DWX-
+FucPGQQLZc4PkwO4OCUeBlxDUsJFzedhX0cKEQr_b9zxhVT3C09yr3q6FyhqrYF892Kql06PmXB
+VEZrb-Q0piVZyozeordNJGRE0l6r8Al0hnc-KgUlkdZrxee_zzk9aV08CUOl-
+fvBRCGOR12v_EAcY17pnyfnCKmZH3u3Iq5D7-
+T3JHJSZz2NuUFrCok81L87X0YbRCscW164VAEsF1QolakktKt8cNRQwj_95rtt1Ka06Fdg6Q-
+VK9NskncKRKnlWcIQT6Ec6eTmr1Ng7JaQ7dqkEh_zThM8ifE-
+Ak6jVdpMiHZ4NvdlOndCPbi1r7zFNrUeRI0BK5PWfOJA90YAnMJ3B7DkrAMyLhZMkKXp4UjEZSQ
+hBhe_lnD9VxL3rZcmRqEctFVmsTnyRZY-
+pZlSx8gS__99WXrtNqD1lR3njeHWJsCi35GoJJwWh3BFCJvsyeQcmsIkkN4RdBrwj_B-
+ZpUKJn1gvho2E7PPkvuMpMPSWr1c1zptCpzamAY2pTjBgmQ5NWDnxN87fUZN9YaJYMcqD7kb-
+kooJuNWw7TcF-YPo_31UHHWd3mKzBVFUeYEqqJBA-
+9KroMQzfC7hc5QQkaA_oGVn0_8_AexX7fNDdXc6yRzM_msfGsbO6pMYegbEijS5F3DaopvpAmwd
+BbFlDRUIGSKpfODn9DNGB2BoqNn1mNPCu_BsqGuPvF3RzgxP-1MoCI3Xf7RxG1DYr-
+bTPsV6pyzinV5HaGSNRorYkXchaXhl19k4d9pfu_4uXeASFVG6WxzdpVwb_w769VQdVYL7KG0u4
+uC_MhWDH0w1DVEFySffBNPpZ6Z_lLYkbc8epocBH9HjJVFByP4gqVieVuDlX_tkK6QUwSPZTl36
+Be4uVf9luAJXZfn3IkMbj8KuRfLjwBE3N4MnjXbz4RHN5dZwaSJftRgYo_DaJPiqcGz1H3dB5B4
+i0A7bLA4H1TEIKLPom-
+A1GnpRruGdoF7dD3dhx8HOKUt7ny7zMrYQWI86bmRzubnMZmi87GguvCoCP7o7ATMJIGprSDmg-
+3TJ5FGyeXaNRZOlEP1Dhc6uh19Pm_PYP7l8tKg5Z_dGgnFWwJp2SDweU7kvWgEUePJVa-
+HKd7iiRGP-
+2cttS8ak4zlq_OjKkFRHi6A2uZ95Yg0dkWgBbHgCHbbuM5oBmIztFixmnHeoTrV3HPbBPw2jEX_
+XINhFVcYnfc1efs0Gh-
+jKA4wrCgStq5bXRhMC5degaoQ0Sb5eY_S_Ehpz1yoA_JYDHp6t8FfnSMTNbM9LfoBTgZDdlrRmw
+d2dBVJxzkbhTpXo4dpShFRsL1vs0GV3wdELBuzMb3UaTyu-
+rJy_DOblfPE8pmlC1NS2_WHrVXB0gJf91MaaIup_Fx7tJzSbqiNG9mFj6SQvMk0HvAyI195NpyF
+NX33x5NLFnF6l25mZdn6MY6nLPeNu9P1yEadZ8uXnMtwfrAOuN83yS2XZDWKHPYSJOaVcsGAjRr
+cGLpulp-dcx1g0XVQgNR0KzaH7J3zbRJ-Lqf7V6w9aYT1JnHk21bof2oGp9NaWN1-
+TqlOEvrAk3-
+EqzyCigOG5A2YZdoRR_1rlCxfNCXz0dtRwM07IX_kEEEKHTs4lk970YTSa_SdhYNMUN0QPBLkjT
+ts_YMnx8Y2wFumFy9Ji3K5o2GHB5nc0a1DioSi9gNEpFjv6pT_Tk9NDIFUBAwv8oV_qp41qFqSp
+A9g6G51madn0K6sonvAsRlDWNjxSBropg1stgWWCRe3Ucp_b9PhZht1rSuJsZynEqLCf9ZLn2lx
+fugLbIOdvaNZxkI2NtNHCv_CsiMFo76rC5SwCJ5uTtD64z53s2txbOPmhWpIGE63OKi3fQSZz5H
+ZdBbidIRcM3vCEseMNw1A27F7_BCIN6o9tZd-lX0Zkvh08Wts2d-c1Fs-
+x5ssLWeoMPpGvnFjZ9pQBD8EyK34JsA5qPTVjLOD62ZRph8PdkiJIoE0es4QMyleVbUe9rbscIN
+F2m5YSHiRWWM5MFSpDFmT67EtriseeWQnVNQTU31_chDRut92yv2G3seSa8HHMLW0Gmq7W7hUUG
+uxLbUSVv74U7_55vpQM0fuRhJ7khTbZioN-
+wBp32Zyy_phgMi5sOqV35lPoCzpZ7ueQwbsS6kvABCj2PjoeQL2trqrjcfkPfLPUKsETgkVrgvi
+jt55bzKmUG624fv1zJbgSt7t3rrPiVQyKflW0YJcx-
+39sKDICQeEFpQp_7gnf7LoKKVPAISDLSSCHJro6R5Vm74INsQQjGn-
+fH55R2sS4GVw74DfWF1k7wp9Upw3JjlgQ9MhRpVjUd98CprL-
+jjdn4k4CuHxZPXEoXEfkvC8PO4HmDN1Od-
+3ShVrilhJ1gLFpuM18l4OylUju9bhHEM8R28YL7ftgWvtzhMkdw3BPM05Uzo29xAsS_GZeDikFl
+db2E7CoZu3evhnrMsk9KWGbbrxcAZDFR1zhNJHJBFVPpjpxgoXy6Br3LAtZBnu2l7Zt5mfAF08h
+EG0baz-MS0hPahcfoE3S7c5xPcV4wTmmX_r9pE_eg-
+6tyiylj5I9hOpgUMtogAgRSNA8VP5YLvoDv5D3eMhK_ZzTQtQGEQulpA86uPKjImusrAe4XAbFE
+fWIPZ--S6xkYacgCzGjqfAQOInmRLg_fOcmuy2atMbCX9Rf66rbGhOTwIY-HEBUAeIA9cY_AL-
+rb78ErzcKhRodnAN3XXq-rpA9709UjBiFm_SEPGEsA6HlmxDoPFubEt1g-
+
+===== PAGE 29 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+29 
+ 
+36CxG41OLaKSEAXPUm105xNWUHS_xOaT55mq4DgaX_3cn8q6za9729x3PiGwtw0LhlhH-
+sezEb7wkSW0HjJoXkRKAMKD_HcaV7cAcwiMEvvE3sX_JQ.m0uVEEEqSLHJRbG-xLOsyA 
+ 
+تکه کد زیر  به زبان جاوا با در اختی ار  داشتن فا یل  کلی د  خصوصی  امضا و گواهی  امضای  مودی  و همچن ین 
+کلید  عمومی  سرور و شناسهی  آن کلی د،  از روی   صورتحساب داده شده، بستهی  امضاشده و رمزشده را تولی د  
+مینمای د: 
+Loading Signature Private Key in PKCS#8 format **/ 
+String privateKeyPath = "path/to/private-key.pem"; 
+KeyFactory keyFactory = KeyFactory.getInstance("RSA"); 
+final PEMParser pemParser = new PEMParser(new FileReader(privateKeyPath)); 
+final PrivateKeyInfo pemKeyPair = (PrivateKeyInfo) pemParser.readObject(); 
+final byte[] encoded = pemKeyPair.getEncoded(); 
+PrivateKey privateKey = keyFactory.generatePrivate(new 
+PKCS8EncodedKeySpec(encoded)); 
+ 
+/** Loading Certificate **/ 
+String certificatePath = "path/to/certificate.crt"; 
+CertificateFactory certificateFactory = 
+CertificateFactory.getInstance("X.509"); 
+X509Certificate certificate = (X509Certificate) 
+certificateFactory.generateCertificate(new 
+FileInputStream(certificatePath)); 
+ 
+/** Loading server Key - Taken from server-information **/ 
+String serverPublicKeyString = "...[Server public key in Base64 
+Format]..."; 
+String serverPublicKeyId = "...[Server Encryption Key Id]..."; 
+final byte[] byteKey = Base64.getDecoder().decode(serverPublicKeyString); 
+final X509EncodedKeySpec X509publicKey = new X509EncodedKeySpec(byteKey); 
+final KeyFactory kf = KeyFactory.getInstance("RSA"); 
+PublicKey publicKey = kf.generatePublic(X509publicKey); 
+ 
+String signatureTime = "2023-05-13T15:32:01Z"; 
+ 
+String invoiceJson = "{ INVOICE JSON }"; 
+ 
+/** Sign Invoice **/ 
+final JsonWebSignature jws = new JsonWebSignature(); 
+ 
+jws.setPayload(invoiceJson); 
+jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256); 
+jws.setKey(privateKey); 
+jws.setCertificateChainHeaderValue(certificate); 
+jws.setHeader("sigT", signatureTime);  
+jws.setHeader("crit", new String[]{"sigT"}); 
+ 
+jws.sign(); 
+ 
+String signedJson = jws.getCompactSerialization(); 
+ 
+
+===== PAGE 30 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۰ 
+ 
+Encrypt Signed Json **/ 
+final JsonWebEncryption jwe = new JsonWebEncryption(); 
+ 
+jwe.setAlgorithmHeaderValue(KeyManagementAlgorithmIdentifiers.RSA_OAEP_256)
+; 
+jwe.setEncryptionMethodHeaderParameter(ContentEncryptionAlgorithmIdentifier
+s.AES_256_GCM); 
+jwe.setPayload(signedJson); 
+jwe.setKey(publicKey); 
+jwe.setKeyIdHeaderValue(serverPublicKeyId); 
+ 
+String encryptedInvoice = jwe.getCompactSerialization(); 
+System.out.println(encryptedInvoice); 
+توجه کنی د که این موارد به طور کامل در SDK پی ادهسازی شدهاند و تنها با فراخوانی  یک تابع میتوان   
+از آن استفاده نمود. تکه کد ارائه شده صرفا به منظور آشنایی  دقی ق تر  با فرآیند  تول ی د  بستهی  امضاشده و رمزشدهی 
+صورتحساب میباشد. در این  بخش هم برای  عملی ات  تولید  JWS  وJWE  از کتابخانهjose-4j  نسخهی  0.9.3 
+استفاده شده است همچنین تکه کد زیر به زبان NET همین عملیات را پیاده سازی میکند: 
+namespace TaxCollectData.Sample; 
+ 
+using System.Globalization; 
+using System.Security.Cryptography; 
+using System.Text.Json; 
+using System.Text.Json.Nodes; 
+using JWT.Algorithms; 
+using JWT.Builder; 
+using Org.BouncyCastle.Crypto.Parameters; 
+using Org.BouncyCastle.OpenSsl; 
+using Org.BouncyCastle.Security; 
+using Jose; 
+using Org.BouncyCastle.Utilities.Encoders; 
+ 
+internal class InvoiceSignAndEncryptionTest 
+{ 
+    public static void Main(string[] args) 
+    { 
+        // Loading Signature Private Key in PKCS#8 format 
+        var privateKeyPemReader = new 
+PemReader(File.OpenText("path/to/private-key.pem")); 
+        var privateKey = DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters) 
+privateKeyPemReader.ReadObject()); 
+ 
+        // Loading Certificate  
+        var certPemReader = new PemReader(new 
+StreamReader("path/to/certificate.crt")); 
+        var certificate = 
+DotNetUtilities.ToX509Certificate((Org.BouncyCastle.X509.X509Certificate) 
+certPemReader.ReadObject()); 
+        var publicKey = DotNetUtilities.ToRSA((RsaKeyParameters) 
+DotNetUtilities.FromX509Certificate(certificate).GetPublicKey()); 
+
+===== PAGE 31 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۱ 
+ 
+ 
+        var invoiceJson = "{ INVOICE JSON }"; 
+         
+        // Generating JWS  
+        var signedJson = JwtBuilder.Create() 
+            .WithAlgorithm(new RS256Algorithm(publicKey, privateKey)) 
+            .AddHeader(HeaderName.X5c, new[] 
+{Convert.ToBase64String(certificate.GetRawCertData())}) 
+            .AddHeader("sigT", DateTime.UtcNow.ToString("yyyy-MM-
+dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture))  
+            .AddHeader("crit", new[] {"sigT"}) 
+            .Encode(JsonSerializer.Deserialize<JsonNode>(invoiceJson)); 
+         
+        // Encrypt jws 
+        var serverPublicKeyString = "...[Server public key in Base64 
+Format]..."; 
+        var serverPublicKeyId = "...[Server Encryption Key Id]..."; 
+        var decoded = Base64.Decode(serverPublicKeyString); 
+        var asymmetricKeyParameter = PublicKeyFactory.CreateKey(decoded); 
+        var rsaParams = DotNetUtilities.ToRSAParameters((RsaKeyParameters) 
+asymmetricKeyParameter); 
+        var rsa = RSA.Create(); 
+        rsa.ImportParameters(rsaParams); 
+        var header = new Dictionary<string, object> 
+        { 
+            { 
+                "kid", serverPublicKeyId 
+            } 
+        }; 
+        var recipient = new JweRecipient(JweAlgorithm.RSA_OAEP_256, rsa, 
+header); 
+        var encryptedInvoice = JWE.Encrypt(signedJson, new[] {recipient}, 
+JweEncryption.A256GCM, mode: SerializationMode.Compact); 
+         
+        Console.WriteLine(encryptedInvoice); 
+    } 
+} 
+این کد نیز از همان پکیجهای قبلی برای امضا و رمزنگاری صورتحساب استفاده مینماید: 
+PackageReference Include="jose-jwt" Version="4.1.0" /> 
+<PackageReference Include="JWT" Version="10.0.2" /> 
+<PackageReference Include="System.Security.Cryptography.Cng" 
+Version="6.0.0-preview.4.21253.7" /> 
+<PackageReference Include="System.Security.Cryptography.X509Certificates" 
+Version="4.3.2" /> 
+<PackageReference Include="Portable.BouncyCastle" Version="1.9.0" /> 
+7- 1- 4-  ارسال صورتحساب 
+ارسال صورتحساب از طری ق  فراخوانی  این  API  به شی وه ی  POST  امکان پذیر  است و از طریق  آن  
+میتوان لی ست ی  از صورتحسابها را با هم ارسال نمود. نحوه ی کار این API به صورت زیر است: 
+
+===== PAGE 32 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+32 
+ 
+Send Invoices – ارسال صورتحساب 
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/invoice 
+Method POST 
+ورودی 
+لی ستی از InvoicePacketها هریک شامل موارد زیر:  
+• header: آبجکتJson 
+o requestTraceId: شناسه منحصر به فرد درخواست از نوعuuid 
+o fiscalId: از نوع رشته، شناسه حافظه صادرکنندهی صورتحساب  
+• payload: از نوع رشته، بستهی JWE صورتحساب (امضا شده و رمز شده 
+محل قرارگی ری: Request Body 
+در یک درخواست ارسال صورتحسابامکان ارسال حداکثر  1000  صورتحساب وجود دارد.  
+خروجی 
+آبجکت Json دارای فی لدها ی زیر:  
+• timestamp: برچسب زمانی لحظه ایجاد  جواب 
+• result: آرایهی Json هری ک شامل شی ئی که دارای فی لدهای زیر است: 
+o uid: همانrequestTraceId ارسال شده به ازای هر صورتحساب  
+o packetType :در اینجاnull است 
+o referenceNumber: شماره پی گی ری صورتحساب ارسال ی 
+o data: در اینجا null است 
+با استفاده از این  API  شرکت معتمد میتواند همهی صورتحسابهای مودیان مختلفی که دسترسی ارسال 
+صورتحساب را به شرکت معتمد واگذار کردهاند ارسال نماید و نیازی نیست همهی صورتحسابهای موجود در 
+یک درخواست متعلق به یک شناسه یکتای حافظه مالیاتی باشد. همچنین مودی می تواند در یک درخواست  ارسال  
+صورتحساب،  صورتحسابهای مربوط به  شناسه یکتاهای مختلف  خود را ارسال نماید.  البته شناسه یکتاهایی که 
+اجازهی ارسال صورتحساب از طریق آنها را به شرکت معتمد واگذار نکرده باشد.  
+همچنین توجه نمایید که مقدار فیلد  requestTraceId  برای هر صورتحساب در یک درخواست باید 
+منحصر به فرد باشد و درصورتی که در یک درخواست دو صورتحساب دارای  requestTraceId  یکسان باشند
+درخواست در همان ابتدا با خطا مواجه میشود. همچنین در صورتی که ارسال کننده درخواست برای یک شناسه 
+
+===== PAGE 33 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+33 
+ 
+یکتا برای دو صورتحساب ازrequestTraceIdهای تکراری استفاده نماید هنگام استعلام وضعیت صورتحساب 
+با uid تنها پاسخ وضعیت یکی از آنها به عنوان جواب برگردانده میشود. 
+نمونه درخواست cURL ارسال صورتحساب و پاسخ آن 
+curl -X 'POST' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/invoice' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGc [ JWT Token ] dLcdPeI_9Q' \ 
+  -H 'Content-Type: application/json' \ 
+  -d '[ 
+  { 
+    "payload": "eyJhbGciOiJ...[ JWE ]...EEzZe9mxIxw", 
+    "header": { 
+      "requestTraceId": "cf019c26-f235-11ed-a05b-0242ac120003", 
+      "fiscalId": "A11216" 
+    } 
+  } 
+]' 
+در صورت صحت توکن و درست بودن ساختار درخواستخروجی برابر است با:  
+{ 
+  "timestamp": 1684054900556, 
+  "result": [ 
+    { 
+      "uid": "cf019c26-f235-11ed-a05b-0242ac120003", 
+      "packetType": null, 
+      "referenceNumber": "3645b684-2c1e-400c-8584-f739c09d99fb", 
+      "data": null 
+    } 
+  ] 
+} 
+8 - استعلام وضعیت صورتحسابهای ارسالی 
+پس از تول ی د  ی ک  بسته  صورتحساب  امضاشده و رمزشده و ارسال آن از طر یق   API  به سرور، وب 
+سرویس  جمعآوری  به شما  یک  شماره  پی گ ی ری  میدهد  و از طریق   آن (یا  از طریق   شناسه درخواست تولی دشده   
+توسط خودتان) و  یا  از طر ی ق   زمان ارسال صورتحساب م یتوانی د  نسبت به وضع ی ت  پردازش صورتحساب و  
+خطاهای  احتمالی  موجود در آن مطلع شو ی د.  جزئیات خطاهای  وب سرویس جمع آوری   و لایه محتوا ،  در سند 
+کدخطاهای سامانه مودیان  آورده شده است.   به عنوان مثال فرض کنید خروجی درخواست ارسال دو صورتحساب 
+به شکل زیر میباشد:  
+
+===== PAGE 34 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۴ 
+ 
+{ 
+  "timestamp": 1684073047333, 
+  "result": [ 
+    { 
+      "uid": "c5352f85-9322-41bc-a5b2-9abb130fe622", 
+      "packetType": null, 
+      "referenceNumber": "f9173085-2316-4ca6-918e-e41aaf7ef8dd", 
+      "data": null 
+    }, 
+    { 
+      "uid": "2b982bfd-9a60-47cd-9da7-30fc0dabd37d", 
+      "packetType": null, 
+      "referenceNumber": "93367b02-23dd-4568-90e1-2b47d799f361", 
+      "data": null 
+    } 
+  ] 
+} 
+برای استعلام وضعیت صورتحساب سه روش وجود دارد که در ادامه شرح داده میشوند. 
+8- 1-  استعلام صورتحساب به وسیله شماره پیگیری  
+به وسی لهی  این  API  میتوان  وضعی ت  صورتحساب ارسالی   را با استفاده از  کد  پی گی ریای  که وب سروی س  جمع 
+آوری به ازای   هر صورتحساب در اختی ار قرار میدهد استعلام نمائ ی م. نحوه ی کار این API به صورت زیر است: 
+Inquiry by Reference Id - استعلام به وسی له شماره پ یگیر ی  
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-reference-id 
+Method GET 
+ورودی 
+فی لدهای زیر: 
+• referenceIds: لی ست شمارهی پی گی ریهایی که قرار است استعلام شوند. 
+• start: شروع بازه زمانی که در آن به دنبال صورتحساب هست ی م. فرمت: 
+2023-05-14T00:00:00.000000000+03:30 
+• end: پایان بازه زمانی که در آن به دنبال صورتحساب هست یم. فرمت:  
+2023-05-14T23:59:59.123456789+03:30 
+ورودیهای  start  وend  اختیاری هستند و در صورتی که مقدار دهی نشوند، جستجو در بین
+صورتحسابهای ارسالی در  24  ساعت  گذشته  انجام میگیرد.  همچنین بازه زمانی مورد استعلام  
+نمیتواند از یک هفته بیشتر باشد.  
+محل قرارگی ری: Request Params 
+
+===== PAGE 35 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+35 
+ 
+خروجی 
+آرایهی  JSON  شامل اشی ائ ی  با محتویات   زیر   (به ازای   هر شماره پی گیری  یک   شیء  JSON  
+در این آرایه برگردانده میشود):  
+• referenceNumber: شماره پی گی ری درخواست استعلام شده  
+• uid: شناسه درخواست (همانrequestTraceId که صورتحساب با آن ارسال شده
+بود)  
+• status: وضعی ت صورتحساب دارای حالتهای زیر:  
+o SUCCESS: صورتحساب فاقد خطا بود و با موفقی ت  در کارپوشه ثبت شد.  
+o FAILED: صورتحساب ارسالی دارای خطا بوده و رد شده است.  
+o IN_PROGRESS: صورتحساب ارسالی  هنوز در صف بررسی می باشد. 
+o NOT_FOUND: شماره پیگی ری داده شده یافت نشد. 
+• data: لی ست خطاها / اخطارهای موجود در صورتحساب  
+• packetType: نوع بسته 
+• fiscalId: شناسه حافظه ارسالکنندهی صورتحساب  
+• sign  :امضای پاسخ  به فرمت بستهی  JWS  که ساختار آن در جدول بعدی توضیح
+داده میشود (فقط در حالت  SUCCESS) 
+همانطور که گفته شد خروجی درخواست استعلام صورتحساب دارای فیلدی به نامsign  میباشد که 
+این فیلد در حالت  SUCCESS  مقدار دهی شده و در سایر حالات برابر با""  می باشد. ساختار این فیلد  JWS 
+که توسط هسته تولید و مقداردهی میشود به شکل زیر است: 
+امضای پاسخ نتیجهی اعتبارسنجی صورتحساب –  JWS 
+Header 
+یک شیء JSON دارای فی لدهای زیر: 
+• alg: الگوریتم  امضا: RS256 
+• sigT: زمان امضای توکن 
+Format:  yyyy-MM-dd'T'HH:mm:ss'Z' 
+Example: 2023-05-13T10:44:47Z 
+Payload 
+شیءJSON  دارای فیلدهای زیر  
+• referenceNumber :شماره پیگیری درخواست صورتحساب ارسالی. مثال 
+
+===== PAGE 36 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+36 
+ 
+6e1c7696-064c-4d95-b9eb-711ab931a734 
+• clientId :شناسهی فرستندهی صورتحساب. مثال: 
+A1112K 
+• taxId: شماره مالیاتی صورتحساب موفق درج شده در کارپوشه. مثال 
+A1112K04D1271489087018 
+• receivedDate: تاریخ دریافت صورتحساب در سامانهی مودیان. مثال: 
+2024-01-08T11:38:54.388Z 
+Signature 
+امضای بستهی حاصل از الحاق  Header  وPayload  با استفاده از الگوریتمRS256  و با
+استفاده از کلید سازمان.  
+شما میتوانید صحت امضای بسته را با استفاده از کلید عمومی سازمان (دریافتی از متد  Get 
+Server-Information) اعتبارسنجی نمایید 
+نمونه دادهی امضا شده هنگام استعلام وضعیت صورتحساب: 
+eyJyZWZl.eyJhbGciOiJSUzI1NiIsInNpZ1QiOiIyMDI0LTAyLTE0VDAzOjA4OjM5WiJ9
+cmVuY2VOdW1iZXIiOiIzMTk3NzhlMC03Zjg0LTQyNDktOThmNC1kZTc5OTBjYjdjNjkiLCJjbGl
+lbnRJZCI6IkExMTFPSyIsInRheElkIjoiQTExMU9LMDREMzYxMjAwRThEQjIxNCIsInJlY2Vpdm
+lanl052gttnAp6F1MX9NxPn9swN4.VkRGF0ZSI6IjIwMjQtMDItMTNUMTE6NTI6NDIuOTgyWiJ9
+-
+IjFiowTX2ytm_1YgAqgzBLytvTBRrq_NopeIH9LIRd275iFJaysMxbFmVnstTLp91hG_iMGFFQv
+AXxwY5EL_LYnexu-
+biPSswfTXK9lf6RjKrIIDm0hyBr2pCZpc_ZXSgwLHyaf1p_GgxvYSql4l3xCNzzFKfp3yI8r0Pa
+hIHovmUlkbdriH_YXKckDw9ZlH6a3NcVslmj65Ed7pemBMmJLPf_Kj7tn7e8s4dUGh0fs6HEotY
+fCB7LMDejPDu6jgbIPkwANHWAxx3dZOeO3bUKSo6SIyInvo3GQvDP5dpyGngkQ9NAme7HKg-
+HjDHJJzEcjKACG-
+Gj3LEsyQveHrL4s5q9YGYWwavZVinbTRMwl75_LRgIeB1UuWNVLS5PtSk2o6drzRnNJ6iN542HH
+tOvnF_y8J57oO1LHXDtpMS5ncQF2e_NJ2tGmFxQs868T1ODgqaHzBc3H7VyQ8KC1uD_W3zAf93e
+1ErKbAdVt2eDHZVFHoREZVoYW3m7qraO5fiYcYUle9TUXLARQwd_ihEcKbRtLbtw42ZHqfXZe52
+Q77vJdY79Xb8OkUjA5kfJ6g4o80Qqa-NaIoeWrFte0g5e-
+SUSJklnd4pZTTApZfCMOngoKFSGJ0USfi0T3M-OX7lyxJbOYKeqUzt4 
+نمونه درخواست استعلام وضعی ت صورتحساب با استفاده از شماره پی گی ر ی: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-reference-
+id?referenceIds=f9173085-2316-4ca6-918e-e41aaf7ef8dd&referenceIds=93367b02-
+23dd-4568-90e1-2b47d799f361&start=2023-05-
+14T10%3A00%3A00.000000000%2B03%3A30&end=2023-05-
+14T21%3A00%3A00.000000000%2B03%3A30' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGciO...[ JWT TOKEN ]...q4RcXogA' 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+[ 
+  { 
+    "referenceNumber": "93367b02-23dd-4568-90e1-2b47d799f361", 
+
+===== PAGE 37 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+37 
+ 
+    "uid": "2b982bfd-9a60-47cd-9da7-30fc0dabd37d", 
+    "status": "FAILED", 
+    "data": { 
+      "error": [ 
+        { 
+          "code": "012802", 
+          "message": "مقدار وارد شده در فیلد «روش تسویه» جز مقادیر مجاز 
+نیست"., 
+          errorType": "ERROR" 
+        } 
+      ], 
+      "warning": [], 
+      "success": false 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": "" 
+  }, 
+  { 
+    "referenceNumber": "f9173085-2316-4ca6-918e-e41aaf7ef8dd", 
+    "uid": "c5352f85-9322-41bc-a5b2-9abb130fe622", 
+    "status": "SUCCESS", 
+    "data": { 
+      "error": [], 
+      "warning": [], 
+      "success": true 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": 
+"eyJhbGciOiJSUzI1NiIsInNpZ1QiOiIyMDI0LTAyLTE0VDAzOjA4OjM5WiJ9.eyJyZWZlcmVuY
+2VOdW1iZXIiOiIzMTk3NzhlMC03Zjg0LTQyNDktOThmNC1kZTc5OTBjYjdjNjkiLCJjbGllbnRJ
+ZCI6IkExMTFPSyIsInRheElkIjoiQTExMU9LMDREMzYxMjAwRThEQjIxNCIsInJlY2VpdmVkRGF
+0ZSI6IjIwMjQtMDItMTNUMTE6NTI6NDIuOTgyWiJ9.lanl052gttnAp6F1MX9NxPn9swN4-
+IjFiowTX2ytm_1YgAqgzBLytvTBRrq_NopeIH9LIRd275iFJaysMxbFmVnstTLp91hG_iMGFFQv
+AXxwY5EL_LYnexu-
+biPSswfTXK9lf6RjKrIIDm0hyBr2pCZpc_ZXSgwLHyaf1p_GgxvYSql4l3xCNzzFKfp3yI8r0Pa
+hIHovmUlkbdriH_YXKckDw9ZlH6a3NcVslmj65Ed7pemBMmJLPf_Kj7tn7e8s4dUGh0fs6HEotY
+fCB7LMDejPDu6jgbIPkwANHWAxx3dZOeO3bUKSo6SIyInvo3GQvDP5dpyGngkQ9NAme7HKg-
+HjDHJJzEcjKACG-
+Gj3LEsyQveHrL4s5q9YGYWwavZVinbTRMwl75_LRgIeB1UuWNVLS5PtSk2o6drzRnNJ6iN542HH
+tOvnF_y8J57oO1LHXDtpMS5ncQF2e_NJ2tGmFxQs868T1ODgqaHzBc3H7VyQ8KC1uD_W3zAf93e
+1ErKbAdVt2eDHZVFHoREZVoYW3m7qraO5fiYcYUle9TUXLARQwd_ihEcKbRtLbtw42ZHqfXZe52
+Q77vJdY79Xb8OkUjA5kfJ6g4o80Qqa-NaIoeWrFte0g5e-
+SUSJklnd4pZTTApZfCMOngoKFSGJ0USfi0T3M-OX7lyxJbOYKeqUzt4" 
+  } 
+] 
+همانطور که م یبی نی د  یکی  از صورتحساب ها با موفق ی ت  ثبت شده و ه ی چ  خطا و اخطار ی  ندارد. ول ی  یکی  از  
+صورتحسابها دارای خطا بوده و خطای موجود در آن در قسمت error  قابل مشاهده میباشد.  
+8- 2-  استعلام با uid 
+
+===== PAGE 38 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+38 
+ 
+فراخوانیاین  API  دقی قا  همانند استعلام به وسی له  Reference number  است با این  تفاوت که در 
+ورودی به جای شماره پی گی ر ی، uid وfiscalId میگی رد. 
+Inquiry by uid - استعلام به وسیله  شناسه درخواست 
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-uid 
+Method GET 
+ورودی 
+فی لدهای زیر: 
+• uidList: لی ست شناسه درخواستهای صورتحسابهای مورد نظر  
+• fiscalId :شناسه حافظه صادر کننده صورتحساب 
+• start: شروع بازه زمانی که در آن به دنبال صورتحساب هست ی م. فرمت: 
+2023-05-14T00:00:00.000000000+03:30 
+• end: پایان بازه زمانی که در آن به دنبال صورتحساب هست یم. فرمت:  
+2023-05-14T23:59:59.123456789+03:30 
+ورودیهای  start  وend  اختیاری هستند و در صورتی که مقدار دهی نشوند، جستجو در بین
+صورتحسابهای ارسالی در 24 ساعت گذشته انجام میگیرد. 
+محل قرارگی ری: Request Params 
+خروجی دقیقا مانند استعلام با شماره پیگیری 
+نمونه درخواست و پاسخ این API را می توانی د ببی نی د:  
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-by-
+uid?uidList=cb080c58-e36f-4bb0-a932-90f672109fb6&uidList=b3bd6327-1c57-
+4cae-85ed-5c88de28aea3&fiscalId=A111YO&start=2023-06-
+10T00%3A00%3A00.000000000%2B03%3A30&end=2023-06-
+10T23%3A59%3A59.999999999%2B03%3A30' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGciOiJ...[JWT TOKEN]...1kvski8e-A' 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+[ 
+  { 
+    "referenceNumber": "780c7cb1-84cf-4df8-a87d-160448f38c55", 
+    "uid": "b3bd6327-1c57-4cae-85ed-5c88de28aea3", 
+    "status": "FAILED", 
+    "data": { 
+      "error": [ 
+        { 
+
+===== PAGE 39 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+39 
+ 
+          "code": "011107", 
+          "message": "طول مقدار وارد شده در فیلد «شماره/شناسه ملی/شناسه 
+مشارکت مدنی/کد فراگیر خریدار» بزرگتر از حداکثر طول مجاز است( .طول مقدار 
+وارد شده باید حداکثر 10 باشد"), 
+          errorType": "ERROR" 
+        } 
+      ], 
+      "warning": [ 
+        { 
+          "code": "111208", 
+          "message": "طول مقدار وارد شده در فیلد «شماره اقتصادی خریدار» 
+کوچکتر از حداقل طول مجاز است( .طول مقدار وارد شده باید حداقل 14 باشد"), 
+          errorType": "WARNING" 
+        } 
+      ], 
+      "success": false 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": "" 
+  }, 
+  { 
+    "referenceNumber": "60e834f9-14b6-43be-8b77-85471678d3da", 
+    "uid": "cb080c58-e36f-4bb0-a932-90f672109fb6", 
+    "status": "SUCCESS", 
+    "data": { 
+      "error": [], 
+      "warning": [], 
+      "success": true 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": 
+"eyJhbGciOiJSUzI1NiIsInNpZ1QiOiIyMDI0LTAyLTEzVDEyOjAxOjExWiJ9.eyJyZWZlcmVuY
+2VOdW1iZXIiOiJmMWQyMDYwZC0zMzZkLTQwNDUtYjg2ZC03ZTAwMTUzOWQyZTUiLCJjbGllbnRJ
+ZCI6IkExMTFPSyIsInRheElkIjoiQTExMU9LMDREMzY3MjJEMzk2QzQ2MyIsInJlY2VpdmVkRGF
+0ZSI6IjIwMjQtMDItMTNUMTI6MDE6MDcuODk0WiJ9.PKlMMmvlU6aVsB4u6CvVD4UANik5QFm1o
+tsnil9EwOiEBTLpn_2S0bkBN5CecIGDX7abRMr8X3H385_gE1oglCv_F7e-
+_r5JVzQVbks82AFhUGkT09AGjhTqTQk45MvtOY1mb26YgsWovERPy4ApgINLUwJH9Pw4otnorHI
+eNgnu-_-JKTVPul4mnfTFMeb7PTDUyv9uIbpwaR5BbVL8OPtL6J4RAl5lI-coTLnCUMi9LLj-
+rUDVkHjdf3_NPL7NADA4GvZwgFZ3Fv2sZxete8z7DBuN4ZdNhvpbs9fYlqdwEkoTE2ZsgD9XapE
+lUMDCQt8oAGG4G2W0JInb30F2ZrSqg2UaVSZ3OiCZFbJ8qXoGlX7IomcgCJ2Bs991c4umrn78Mx
+2s2UFiF9ckkfJgsIUgpk3jeQ8oEVJuLCRoeTA5MmP4j3Z_z2AFDzkazhZAXmGfDtp6O80HHKz4K
+pm77ccTgIPiIYZawb5VUZe1OdOdguFb2T2q3aeP7bA91ue4ntmYaL19vjaEhi7XI5XdbH189t7x
+2OaHx_DR70h2KI9hbFZBSEZJM_JmXPDJ6slhFvHcblMPf-
+p9fT2r3NOj5mNiBUREnTLi6NvUXwUz6hhspdvdE-xrW51aMkGPp4_Zy51YNKi9KZ1d_EWhMpwe-
+HtQjXeVEyc8ldkE4uSP6IE" 
+  } 
+] 
+همانطور که مشاهده میکنید، یکی از صورتحسابها با موفقیت در کارپوشه ثبت شده و دیگری دارای 
+خطا میباشد و لیست خطاها و هشدارهای موجود در صورتحساب برگردانده میشوند.  
+
+===== PAGE 40 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۰۴ 
+ 
+8- 3-  استعلام براساس بازهی زمانی 
+این  API  نیز مانند دو موردقبلی است  و  صورتحسابهای  فرستاده شده  در  یک  بازهی  زمانی  مشخص را 
+به صورت صفحهبندی  شده برمیگرداند.  همچنین امکان فیلترکردن صورتحساب براساس وضعیت نیز وجود دارد. 
+Inquiry - استعلام در بازه زمانی  
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry 
+Method GET 
+ورودی 
+فی لدهای زیر: 
+• pageNumber: شماره صفحه (مقدار پیشفرض: 1) 
+• pageSize: اندازهی صفحه (مقدار پیشفرض: 10 – مقادیر مجاز: 1 تا100 ) 
+• status: وضعیت صورتحسابهایی که به دنبال آن هستیم. 
+o مقادیر مجاز:  SUCCESS, FAILED, TIMEOUT, IN_PROGRESS 
+o در صورتی که این فیلد خالی باشد همهی صورتحسابها برگردانده میشود. 
+• start: شروع بازه زمانی که در آن به دنبال صورتحساب هست ی م. فرمت: 
+2023-05-14T00:00:00.000000000+03:30 
+• end: پایان بازه زمانی که در آن به دنبال صورتحساب هست یم. فرمت:  
+2023-05-14T23:59:59.123456789+03:30 
+ورودیهای  start  وend  اختیاری هستند و در صورتی که مقدار دهی نشوند، جستجو در بین
+صورتحسابهای ارسالی در 24 ساعت گذشته انجام میگیرد. 
+محل قرارگی ری: Request Params 
+خروجی دقی قا همانند استعلام با شماره پی گی ری و uid  
+نمونه درخواست ارسالی 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry?start=2023-06-
+10T00%3A00%3A00.000000000%2B03%3A30&end=2023-06-
+10T23%3A59%3A59.999999999%2B03%3A30&pageNumber=1&pageSize=10' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGciOi...[JWT TOKEN]...iKKXzBjRZw' 
+درصورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+
+===== PAGE 41 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۱۴ 
+ 
+[ 
+  { 
+    "referenceNumber": "780c7cb1-84cf-4df8-a87d-160448f38c55", 
+    "uid": "b3bd6327-1c57-4cae-85ed-5c88de28aea3", 
+    "status": "FAILED", 
+    "data": { 
+      "error": [ 
+        { 
+          "code": "011107", 
+          "message": "طول مقدار وارد شده در فیلد «شماره/شناسه ملی/شناسه 
+مشارکت مدنی/کد فراگیر خریدار» بزرگتر از حداکثر طول مجاز است( .طول مقدار 
+وارد شده باید حداکثر 10 باشد"), 
+          errorType": "ERROR" 
+        } 
+      ], 
+      "warning": [ 
+        { 
+          "code": "111208", 
+          "message": "طول مقدار وارد شده در فیلد «شماره اقتصادی خریدار» 
+کوچکتر از حداقل طول مجاز است( .طول مقدار وارد شده باید حداقل 14 باشد"), 
+          errorType": "WARNING" 
+        }      ], 
+      "success": false 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": "" 
+  }, 
+  { 
+    "referenceNumber": "60e834f9-14b6-43be-8b77-85471678d3da", 
+    "uid": "cb080c58-e36f-4bb0-a932-90f672109fb6", 
+    "status": "SUCCESS", 
+    "data": { 
+      "error": [], 
+      "warning": [], 
+      "success": true 
+    }, 
+    "packetType": "receive_invoice_confirm", 
+    "fiscalId": "A111OK", 
+    "sign": 
+"eyJhbGciOiJSUzI1NiIsInNpZ1QiOiIyMDI0LTAyLTE3VDA5OjA3OjUzWiJ9.eyJyZWZlcmVuY
+2VOdW1iZXIiOiI4MjczYzhkMi1jNWJmLTQyYmQtYTQwZi0wNDA1MjA5YzU2MjkiLCJjbGllbnRJ
+ZCI6IkExMTFPSyIsInRheElkIjoiQTExMU9LMDREM0FFQjM1MjAxQTc1NyIsInJlY2VpdmVkRGF
+0ZSI6IjIwMjQtMDItMTdUMDk6MDc6NTEuNDUyWiJ9.VnC48sJLngr2YqjpD50bHYmBP0oIZP-
+KK7CxB9aZjTPAU5x4xKSyYdCNGRfWlLmnHRpVAHUKs3oeRsHF_uxfD2nGDC6qXHg6MFOcnLU3Hc
+IETk-tqIgyVRv3eO6zMyf9ImjatQkD-niW0wjyk7YkK_wl3XFy7lve4YMnR2yE49V-
+1ejjj1CwlnICyVlMKG-
+IkpnGNy76HA3V0mPZ7Jtlb2cSFt037WVkD9eAGMSl8biQYXsPHgsu1f1USHIrqAWCGaqQfkp_qF
+C2nHC4um8RXGAKfxqBQTbmvSEOEk7R3dxRsciNSsxseS9QZIDJqMPmxZcOZFjT0H5Gt8Kpgj2qj
+3LcVxXyk3R_QGH1w8FhLU8SAECCnLtkPazZ8I_WHnSAOwXvV_N3gKB5QkCLK-
+8No2LPvktsuDT1R5-GB8wI2cTsxsRuG9QI0MCKBvbGVntSR5oEA_UgP-
+pT7OMXswFsvkoCAmkEfRaqor0-
+IFzNU6z2NVy8bNZ4snwp8VaQNbqXgxuncUVikdoUsbC_uT648alg6QZw4xDeRCbt29Ut9VNY91S
+UT9s5BCnyS1B-
+
+===== PAGE 42 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+2 
+ 
+6fk4IhQUO8KkpD37HMTCTNHur33dFQ_qDHG4zcttGI1Q4lj7f6FwP8c1wW59oVCAJfLyekJjGr5
+a0aqJtQXF3G5YwBzfQmtRj6hP62cyWC5ixv8" 
+  } 
+] 
+9 - استعلام اطلاعات حافظه و مودی 
+9- 1-  اطلاعات حافظه 
+این  API  اطلاعات مربوط به حافظه مالی اتی  (شامل فعالبودن / عدم فعال بودن، حد مجاز فروش و شماره  
+اقتصادی متصل به آن) را برمیگرداند. نحوهی کار این API به صورت زیر است:  
+GET Fiscal Information - دریافت اطلاعات حافظه  
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/fiscal-information 
+Method GET 
+ورودی 
+• memoryId: شناسه حافظه مورد نظر 
+محل قرارگی ری: Request Params 
+خروجی 
+شیء JSON  شامل فی لدهای زیر: 
+• nameTrade: شناسه حافظه 
+• fiscalStatus: وضعی ت حافظه 
+• nationalId  :شناسهی ملی پرونده / کد ملی صاحب پرونده  
+• economicCode: کد اقتصادی پرونده 
+نمونه ورودی: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/fiscal-
+information?memoryId=A11216' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGc...[ JWT Token ]...OFh9zw' 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+{ 
+  "nameTrade": "A11216", 
+  "fiscalStatus": "ACTIVE", 
+  "nationalId": "14003778990", 
+  "economicCode": "14003778990" 
+} 
+
+===== PAGE 43 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+3 
+ 
+9- 2-  اطلاعات مودی 
+این API اطلاعات پرونده مودی را برمی گرداند و نحوهی کار آن به شکل زیر است:  
+GET Taxpayer - دریافت اطلاعات مود ی  
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/taxpayer 
+Method GET 
+ورودی 
+• economicCode: شماره اقتصادی مودی  
+محل قرارگی ری: Request Params 
+خروجی 
+شیء JSON  شامل فی لدهای زیر: 
+• nameTrade: نام مودی / پرونده اقتصادی  
+• taxpayerStatus:  وضعیت  پرونده  شامل فیلدهای NOT_ALLOCATED»
+تخصیص نیافته،ACTIVE»DEACTIVATED»
+(عبور از حد مجاز ماده6)،TEMPORARY_UNAUTHORIZE»
+«PERMANENT_UNAUTHORIZE»ARTICLE_2_SUBJECT »
+به معنی مشمول تبصره ماده  2 میباشد.  
+• nationalId: شناسهی ملی پرونده / کد ملی صاحب پرونده 
+نمونه درخواست ارسالی: 
+curl -X 'GET' \ 
+  
+'https://tp.tax.gov.ir/requestsmanager/api/v2/taxpayer?economicCode=1400377
+8990' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGci...[ JWT Token ]...klQXOM-_uA' 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+{ 
+  "nameTrade": "پیشخوان الکترونیک ایرانیان منطقه آزاد انزلی", 
+  taxpayerStatus": "ACTIVE", 
+  "nationalId": "14003778990" 
+} 
+  
+
+===== PAGE 44 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+۴۴ 
+ 
+۰- استعلام وضعیت صورتحساب در کارپوشه  
+ این سرویس وضعیت صورتحساب ها را برمیگرداند و و نحوه کار آن به شکل زیر است. 
+GET INVOICE STATUS –  استعلام وضعیت صورتحساب 
+آدرس https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-invoice-status 
+Method GET 
+ورودی 
+• taxIds :لیست شماره مالیاتی صورتحساب  
+محل قرارگی ری: Request Params 
+خروجی 
+شیء JSON  شامل فی لدهای زیر: 
+• taxId : شماره مالیاتی ارسالی 
+• invoiceStatus: وضعیت  صورتحساب دارای مقادیر زیر:  
+ REJECTED(رد شده)  
+APPROVED(تایید شده)  
+SYSTEMIC_APPROVED(تایید سیستمی)  
+IMPOSSIBLE_REACTION(عدم امکان واکنش)  
+AWAITING_REACTION(در انتظار واکنش)  
+NO_NEED_REACTION(عدم نیاز به واکنش)  
+CANCELED(باطل شده)  
+ 
+• article6Status: وضعیت عبور از حدمجاز ماده ۶ دارای مقادیر زیر:  
+EXCEEDED (عدول) 
+NOT_EXCEEDED(عدم عدول) 
+• error: خطا، دارای مقادیر زیر 
+NOT_FOUND(صورتحساب یافت نشد) 
+ACCESS_DENIED(دسترسی ندارید) 
+ 
+نمونه درخواست ارسالی: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/inquiry-invoice-
+status?taxIds=A111DW04E8300004349008&taxIds=A111DW04E8300003CC4EA5' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJhbGci...[ JWT Token ]...klQXOM-_uA' 
+
+===== PAGE 45 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+5 
+ 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با:  
+[{ 
+  "taxId": " A111DW04E8300004349008", 
+  "invoiceStatus": "APPROVED", 
+  "article6Status": "NOT_EXCEEDED", 
+  "error": null 
+}, 
+{ 
+  "taxId": "A111DW04E8300003CC4EA5", 
+  "invoiceStatus": "APPROVED", 
+  "article6Status": "NOT_EXCEEDED", 
+  "error": null 
+} 
+] 
+  
+11- ارسال پرداخت صورتحساب  
+این وب سرویس  بدین صورت   است    که مودی  میتواند با فراخوانی   سرویس پرداخت تجمیعی 
+صورتحساب مرتبط با مورد کاربرد برای  صورتحساب های الکترونیکی که روش تسویه آنها به صورت نسیه یا 
+نقدی/ نسیه هستند ثبت پرداخت انجام دهد و وضعیت پرداخت انجام شده را به صورت همگام مشاهده کند . 
+POST INVOICE PAYMENT  – پرداخت و استعلام پرداخت 
+آدرس payment-https://tp.tax.gov.ir/requestsmanager/api/v2/invoice     
+Method POST 
+ورودی 
+• paymentReqeust  :شی ارسال پرداخت 
+محل قرارگی ری: Request Body 
+Json  شامل فیلد های زیر است  
+• taxid(شماره مالیاتی صورتحساب 
+• paidAmount(مبلغ پرداخت)  
+• paymentDate(تاریخ و زمان پرداخت)  
+• paymentMethod(روش پرداخت)  
+▪ CHEQUE : چک 
+▪ BARTER : تهاتر 
+
+===== PAGE 46 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+6 
+ 
+▪ CASH  : وجه نقد 
+▪ POS : دستگاه پوز 
+▪ INTERNET : درگاه پرداختی اینترنتی 
+▪ CARD: کارت به کارت 
+▪ TRANSFER : انتقال به حساب 
+▪ OTHER  : دیگر 
+• terminalNumber(شماره پایانه 
+• referenceNumber(شماره مرجع پرداخت 
+PaymentMethod  شامل موارد زیر میباشد 
+ 
+خروجی 
+شیء JSON  شامل فی لدهای زیر: 
+• requestStatus :وضعیت درخواست 
+شامل (SUCCESS, FAILED) 
+• error :لیست خطاها شامل:  
+o code  (کد خطا 
+o Message(پیغام خطا 
+ 
+ 
+نمونه درخواست ارسالی: 
+curl -X 'GET' \ 
+  'https://tp.tax.gov.ir/requestsmanager/api/v2/ /invoice-payment' \ 
+  -H 'accept: */*' \ 
+  -H 'Authorization: Bearer eyJjcml0Ij...-w' \ 
+  -H 'Content-Type: application/json' \ 
+  -d '{ 
+  "taxId": "A111H104EA6001D0B32AC6", 
+  "paidAmount": 0, 
+  "paymentDate": 0, 
+  "paymentMethod": "CHEQUE", 
+  "terminalNumber": "string", 
+  "referenceNumber": "string" 
+}' 
+ 
+
+===== PAGE 47 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+7 
+ 
+در صورت صحت توکن و درست بودن ساختار درخواست خروجی برابر است با 
+{ 
+[ 
+ "requestStatus": "SUCCESS", 
+  "error": [ 
+    { 
+      "code": "string", 
+      "message": "string" 
+    } 
+  ] 
+ 
+] 
+} 
+ 
+ -12پیوستها 
+۰- 1-  گواهی و کلید خصوصی امضا 
+گواهی امضایی که در Header بستههای Jws فرستاده میشود برابر است با: 
+-----BEGIN CERTIFICATE----- 
+MIIDejCCAmKgAwIBAgIUV27QXqJjK2EgFy9zeYkpsX+ISPswDQYJKoZIhvcNAQEL 
+BQAwcTELMAkGA1UEBhMCSVIxDDAKBgNVBAgMA1RlaDEMMAoGA1UEBwwDVGVoMREw 
+DwYDVQQKDAhNb2hheW1lbjEMMAoGA1UECwwDVGF4MSUwIwYJKoZIhvcNAQkBFhZt 
+Lm1hbHZlcmRpQG1vaGF5bWVuLmlyMB4XDTIzMDMyNDEzMjgyM1oXDTI0MDMyMzEz 
+MjgyM1owTTEPMA0GA1UEAwwGQW56YWxpMRcwFQYDVQQKDA5RdW9WYWRpcyBHcm91 
+cDELMAkGA1UEBhMCSVIxFDASBgNVBAUTCzE0MDAzNzc4OTkwMIIBIjANBgkqhkiG 
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzLgyk5KO6+j9d1ud0ilJArrZ3Whw/w9wEzHB 
+9yXwENRa5fm5AbRukMF5b6VGeKzD6LZuL9+tfdFfWyPcjI++gGNywzRmEHKpTnzP 
+1t6NyuXKfm4nBVAblsugSw8Y5DEXRfTqILgBWN/pZ4zGlifEALMcGAs7ADcjnv7b 
+/tM2wxr9rHxsCvW4HvlzQasK8Qr1CrKgT0EI66rSXCHep/uIONDWp0W2OelMlZtM 
+6AAjWXRLGcshPIHuK+ZLfAFxWtoGonf6qN9ypos2B18D/EFa8WHON62eYKT0kW3j 
+BVa3yPEkRwkdDjDu/3CPzymhf3WFYwxpb4t35oWb/qUXGVIdvwIDAQABoy4wLDAf 
+BgNVHSMEGDAWgBSx+Oq+RO3x/FmyCp+jcmfOH+Fn9TAJBgNVHRMEAjAAMA0GCSqG 
+SIb3DQEBCwUAA4IBAQAgKATXlnS+pPtAiRIYGtydVU5Vi7Aq+D6QW07uFqcB7vBh 
+ddN3yX2lVVcwpTNJzhv8UCM+mDMvlmsRVKVtMoo5fHfII92/Wo8rUz1RP+yhyCk0 
+Vz8I11v+bjLwVur/agC/s5Rf0m66pNNjFZ9J3S2N3lChXYwz2vvA8pdAYvWTu9g5 
+u4FMFqlsaLwMGC+WaA0g3KYzRkdWRy1vd23hLTUcVsWM8wpgZ11wEGE1khca/Sd0 
+mCU2HG5vIbqFfTjA6to0fY07CE5fD8aR3UcXjNduosVO52ZqCX5SabrhFS3AGHFR 
+jpFnI5LZespiCXSA8Sv3kOSCSRQKqFbiwSFM8Zjg 
+-----END CERTIFICATE----- 
+
+===== PAGE 48 =====
+ 
+سندی اتصال به سامانه مودیان » 
+شناسه سند 
+RC_TICS.IS_v1.6 
+شهریور ۰۴۱۴ 
+ 
+8 
+ 
+همچنین کلید خصوصی متناظر با این گواهی که در فرآیند امضای بستهها استفاده شده کلید زیر است: 
+[REDACTED BY THIS REPO — RSA PRIVATE KEY REMOVED]
+The guide's appendix prints the private key matching the worked example's x5c.
+It was stripped here so this file carries no loadable key. The same keypair is
+committed deliberately, once, at tests/vectors/sample_keypair/ — see the README
+there. Nothing in the test suite reads this region; the conformance test needs
+only the token near line 561.
+ 
+ 
