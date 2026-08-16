@@ -1,0 +1,36 @@
+stages:
+  - publish
+  - release
+
+variables:
+  PROJECT_FILE: "./TaxCollectData.Library/TaxCollectData.Library.csproj"
+  NUGET_API_KEY: $NEXUS_NUGET_API_KEY
+
+publish:
+  stage: publish
+  image: $DOCKER_REGISTRY/dotnet/sdk:latest
+  script:
+    - echo "Authenticating to Nexus NuGet repository..."
+    - dotnet nuget add source $NEXUS_REPO_URL -n nexus -u $MAVEN_USERNAME -p $MAVEN_PASSWORD --store-password-in-clear-text --allow-insecure-connections
+    - echo "Building the project..."
+    - dotnet build $PROJECT_FILE --configuration Release
+    - echo "Packing the NuGet package..."
+    - dotnet pack $PROJECT_FILE --configuration Release --output ./artifacts
+    - echo "Publishing the NuGet package to Nexus..."
+    - PACKAGE_FILE=$(ls ./artifacts/*.nupkg | head -n 1)
+    - if [ -z "$PACKAGE_FILE" ]; then echo "No NuGet package found! Exiting." && exit 1; fi
+    - dotnet nuget push "$PACKAGE_FILE" --source nexus
+  rules:
+    - if: $CI_COMMIT_TAG
+
+gitlab_release:
+  stage: release
+  image: $DOCKER_REGISTRY/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "Running the release job."
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'Release $CI_COMMIT_TAG'
+    description: 'Release created using the release-cli.'

@@ -1,0 +1,60 @@
+namespace TaxCollectData.Library.Application.DTOs;
+
+public class HeaderDto
+{
+    public string taxid { get; set; } = string.Empty;
+    public long indatim { get; set; }
+    public int ins { get; set; }
+    public long? indati2m { get; set; }
+    public int? inty { get; set; }
+    public int? ft { get; set; }
+    public string? inno { get; set; }
+    public string? irtaxid { get; set; }
+    public string? scln { get; set; }
+    public int? setm { get; set; }
+    public string? tins { get; set; }
+    public long? cap { get; set; }
+    public string? bid { get; set; }
+    public long? insp { get; set; }
+    public long? tvop { get; set; }
+    public string bpc { get; set; } = string.Empty;
+    public long? tax17 { get; set; }
+    public int? inp { get; set; }
+    public string? scc { get; set; }
+    public string? billid { get; set; }
+    public long? tprdis { get; set; }
+    public long? tdis { get; set; }
+    public long? tadis { get; set; }
+    public long? tvam { get; set; }
+    public long? todam { get; set; }
+    public long? tbill { get; set; }
+    public int? tob { get; set; }
+    public string? tinb { get; set; }
+    public string? sbc { get; set; }
+    public string? bbc { get; set; }
+    public string? bpn { get; set; }
+    public string? crn { get; set; }
+    public string? cdcn { get; set; }
+    public int? cdcd { get; set; }
+    public decimal? tonw { get; set; }
+    public long? torv { get; set; }
+    public decimal? tocv { get; set; }
+    public string? tinc { get; set; }
+    public string? lno { get; set; }
+    public string? lrno { get; set; }
+    public string? ocu { get; set; }
+    public string? oci { get; set; }
+    public string? dco { get; set; }
+    public string? dci { get; set; }
+    public string? tid { get; set; }
+    public string? rid { get; set; }
+    public byte? lt { get; set; }
+    public string? cno { get; set; }
+    public string? did { get; set; }
+    public List<ShippingGoodDto> sg { get; set; } = new();
+    public string? asn { get; set; }
+    public int? asd { get; set; }
+    public string? In { get; set; }
+    public string? an { get; set; }
+}
+
