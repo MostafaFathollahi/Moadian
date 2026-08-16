@@ -15,7 +15,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from moadian.config import Environment, Profile, ProfileStore, Settings
-from moadian.config.keyring import KeyRing
 from moadian.errors import (
     ConfigurationError,
     CryptographyError,
@@ -69,8 +68,12 @@ def key_dir(tmp_path_factory, credentials: tuple[bytes, bytes]) -> Path:
 
 
 @pytest.fixture
-def keyring(key_dir: Path) -> KeyRing:
-    return KeyRing(key_dir)
+def settings(key_dir: Path) -> Settings:
+    """Settings whose signing material points at the temp key directory."""
+    return Settings(
+        certificate_path=key_dir / "dev.crt",
+        private_key_path=key_dir / "dev.pem",
+    )
 
 
 @pytest.fixture
@@ -79,8 +82,6 @@ def profile(credentials: tuple[bytes, bytes]) -> Profile:
         name="sandbox",
         memory_id="A1B2C3",
         environment=Environment.SANDBOX,
-        certificate_file="dev.crt",
-        private_key_file="dev.pem",
         economic_code="14001234567",
     )
 
@@ -121,9 +122,7 @@ def test_validate_accepts_a_good_profile(profile: Profile) -> None:
         ("memory_id", "A1B2C3D"),
         ("base_url_override", "sandboxrc.tax.gov.ir"),  # no scheme
         ("base_url_override", "https://sandboxrc.tax.gov.ir/requestsmanager/"),  # trailing slash
-        ("certificate_file", ""),
-        ("private_key_file", ""),
-        ("economic_code", "14A01234567"),
+                ("economic_code", "14A01234567"),
     ],
 )
 def test_validate_rejects_bad_fields(profile: Profile, field: str, value: object) -> None:
@@ -132,8 +131,8 @@ def test_validate_rejects_bad_fields(profile: Profile, field: str, value: object
         profile.validate()
 
 
-def test_redacted_omits_key_material(profile: Profile, keyring) -> None:
-    view = profile.redacted(keyring)
+def test_redacted_omits_key_material(profile: Profile, settings: Settings) -> None:
+    view = profile.redacted(settings)
     flat = json.dumps(view, ensure_ascii=False)
     assert "PRIVATE KEY" not in flat
     assert "CERTIFICATE" not in flat
@@ -141,15 +140,12 @@ def test_redacted_omits_key_material(profile: Profile, keyring) -> None:
     # there is nothing for a serialiser, a log line or a repr to expose.
     assert not hasattr(profile, "private_key_pem")
     assert not hasattr(profile, "certificate_pem")
-    assert "PRIVATE KEY" not in flat
     assert set(view) >= {
         "name",
         "memory_id",
         "environment",
         "base_url",
         "economic_code",
-        "certificate_file",
-        "private_key_file",
     }
     assert view["memory_id"] == "A1B2C3"
     assert view["economic_code"] == "14001234567"
@@ -165,9 +161,6 @@ def test_repr_and_str_carry_no_key_material(profile: Profile) -> None:
         assert "PRIVATE KEY" not in text
         assert "certificate_pem" not in text
         assert "private_key_pem" not in text
-        # Filenames are fine to show — they are not secret and the admin panel
-        # needs them to tell an operator which file a profile points at.
-        assert "dev.pem" in text or "dev.crt" in text
 
 
 def test_repr_still_identifies_the_profile(profile: Profile) -> None:
@@ -193,8 +186,8 @@ def test_profile_store_repr_hides_the_passphrase(tmp_path: Path) -> None:
         assert "profiles.json" in text
 
 
-def test_redacted_summarises_the_certificate(profile: Profile, keyring) -> None:
-    cert = profile.redacted(keyring)["certificate"]
+def test_redacted_summarises_the_certificate(profile: Profile, settings: Settings) -> None:
+    cert = profile.redacted(settings)["certificate"]
     # national_id is surfaced so the admin panel can show the کد ملی the
     # organization will match against `tins` — a mismatch there is error 4103,
     # and the operator should be able to see it before submitting.

@@ -180,9 +180,9 @@ class MoadianClient:
         because a memory id is issued per environment and is not portable: pairing
         a production URL with a sandbox identity is the mistake this prevents.
 
-        The signatory is built from the key files the profile names, read from
-        the server-side key directory. Key bytes are never carried on the profile
-        and never cross the HTTP boundary — see :mod:`moadian.config.keyring`.
+        The signatory comes from the key configured for the profile's
+        environment. Key bytes are never carried on the profile and never cross
+        the HTTP boundary — see :mod:`moadian.config.keyring`.
         """
         # Imported here, not at module scope: config depends on nothing in client,
         # and the TYPE_CHECKING guard above keeps that direction one-way.
@@ -190,7 +190,7 @@ class MoadianClient:
 
         profile.validate()
         settings = settings or _Settings()
-        credentials = profile.load_credentials(settings.keyring)
+        credentials = profile.load_credentials(settings)
         return cls(
             base_url=profile.base_url_override or settings.base_url(profile.environment),
             client_id=profile.memory_id,

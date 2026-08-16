@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from moadian.config.environment import Environment
-from moadian.config.keyring import KeyRing
+from moadian.config.keyring import SigningMaterial
 
 __all__ = ["Settings"]
 
@@ -34,10 +34,16 @@ class Settings(BaseSettings):
     # Holds the profile store, the taxid serial counter, and cached server keys.
     instance_dir: Path = Path("instance")
 
-    #: Where signing material lives, placed by an operator out of band. Private
-    #: keys are read from here and never accepted over HTTP — see
-    #: moadian.config.keyring for why. Override with MOADIAN_KEY_DIR.
-    key_dir: Path = Path("instance/keys")
+    #: Signing material. Set from the environment at startup and never from a
+    #: request — see moadian.config.keyring for why. The bare pair is the default
+    #: for both environments; the per-environment pairs override it, which is what
+    #: you want once production has a CA-issued certificate and sandbox does not.
+    certificate_path: Path | None = None
+    private_key_path: Path | None = None
+    sandbox_certificate_path: Path | None = None
+    sandbox_private_key_path: Path | None = None
+    production_certificate_path: Path | None = None
+    production_private_key_path: Path | None = None
 
     def base_url(self, environment: str | Environment = Environment.SANDBOX) -> str:
         """The base URL for an environment.
@@ -50,10 +56,25 @@ class Settings(BaseSettings):
         env = Environment.parse(environment)
         return self.production_base_url if env.is_production else self.sandbox_base_url
 
-    @property
-    def keyring(self) -> KeyRing:
-        """The server-side key directory this deployment reads signing material from."""
-        return KeyRing(self.key_dir)
+    def signing_material(self, environment: str | Environment) -> SigningMaterial:
+        """Which certificate and key this environment signs with.
+
+        Resolution is environment-specific first, then the shared default. A
+        profile picks between them only by naming its environment; nothing a
+        caller sends can influence which file is read.
+        """
+        env = Environment.parse(environment)
+        if env.is_production:
+            certificate = self.production_certificate_path or self.certificate_path
+            private_key = self.production_private_key_path or self.private_key_path
+        else:
+            certificate = self.sandbox_certificate_path or self.certificate_path
+            private_key = self.sandbox_private_key_path or self.private_key_path
+        return SigningMaterial(
+            environment=env,
+            certificate_path=Path(certificate) if certificate else None,
+            private_key_path=Path(private_key) if private_key else None,
+        )
 
     @property
     def profile_store_path(self) -> Path:

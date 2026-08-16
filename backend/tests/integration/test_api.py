@@ -38,14 +38,19 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
     """The API wired to a temp instance directory and the mock tax service."""
     cert_pem, key_pem = credential_pems
 
-    # Signing material lives on the server, placed out of band — never uploaded.
+    # Signing material is configured in the server's environment and placed on
+    # disk out of band. Nothing about it is ever accepted over HTTP.
     key_dir = tmp_path / "keys"
     key_dir.mkdir()
     (key_dir / "dev.crt").write_bytes(cert_pem)
     (key_dir / "dev.pem").write_bytes(key_pem)
     (key_dir / "dev.pem").chmod(0o600)
 
-    settings = Settings(instance_dir=tmp_path, key_dir=key_dir)
+    settings = Settings(
+        instance_dir=tmp_path,
+        certificate_path=key_dir / "dev.crt",
+        private_key_path=key_dir / "dev.pem",
+    )
     profiles = ProfileStore(tmp_path / "profiles.json", PASSPHRASE)
     records = RecordStore(tmp_path / "records.sqlite")
 
@@ -54,8 +59,6 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
             name=PROFILE,
             memory_id=MEMORY_ID,
             environment=Environment.SANDBOX,
-            certificate_file="dev.crt",
-            private_key_file="dev.pem",
             economic_code="14003778990",
             # Points the client at the in-process mock. No /requestsmanager prefix:
             # the mock serves /api/v2 at its root.
@@ -188,8 +191,6 @@ async def test_creating_a_profile_binds_environment_to_memory_id(
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "tp",  # the subdomain spelling must resolve
-            "certificate_file": "dev.crt",
-            "private_key_file": "dev.pem",
         },
     )
     assert response.status_code == 201, response.text
@@ -205,8 +206,6 @@ async def test_an_unknown_environment_is_refused(client: httpx.AsyncClient) -> N
             "name": "x",
             "memory_id": "C33333",
             "environment": "staging",
-            "certificate_file": "dev.crt",
-            "private_key_file": "dev.pem",
         },
     )
     assert response.status_code == 400
@@ -297,8 +296,6 @@ async def test_reference_data_is_scoped_to_a_profile(client: httpx.AsyncClient) 
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "production",
-            "certificate_file": "dev.crt",
-            "private_key_file": "dev.pem",
         },
     )
     await client.post(
@@ -424,8 +421,6 @@ async def test_dashboard_is_scoped_to_the_selected_profile(client: httpx.AsyncCl
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "production",
-            "certificate_file": "dev.crt",
-            "private_key_file": "dev.pem",
         },
     )
     await client.post(f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": valid_invoice()})
@@ -437,28 +432,42 @@ async def test_dashboard_is_scoped_to_the_selected_profile(client: httpx.AsyncCl
 # --------------------------------------------------- keys never cross the wire
 
 
-async def test_key_files_lists_names_and_modes_but_never_contents(
+async def test_signing_material_reports_status_without_exposing_contents(
     client: httpx.AsyncClient,
 ) -> None:
-    """The admin picker. Listing a key directory must not leak the keys."""
-    body = (await client.get("/api/key-files")).json()
-    assert [f["name"] for f in body["keys"]] == ["dev.pem"]
-    assert [f["name"] for f in body["certificates"]] == ["dev.crt", "dev.pem"]
+    """The admin panel's view of the server's signing configuration."""
+    body = (await client.get("/api/signing-material")).json()
+    sandbox = next(m for m in body if m["environment"] == "sandbox")
 
-    raw = (await client.get("/api/key-files")).text
+    assert sandbox["certificate"]["configured"] is True
+    assert sandbox["certificate"]["exists"] is True
+    assert sandbox["privateKey"]["mode"] == "0600"
+    assert sandbox["privateKey"]["worldReadable"] is False
+
+    raw = (await client.get("/api/signing-material")).text
     assert "PRIVATE KEY" not in raw
-    assert "MII" not in raw, "no base64 key body may appear in the listing"
-
-    private = next(f for f in body["keys"] if f["name"] == "dev.pem")
-    assert private["mode"] == "0600"
-    assert private["worldReadable"] is False
+    assert "MII" not in raw, "no base64 key body may appear in the status"
 
 
-async def test_no_endpoint_accepts_a_pem(client: httpx.AsyncClient, credential_pems) -> None:
+async def test_a_world_readable_private_key_is_flagged(
+    client: httpx.AsyncClient, tmp_path
+) -> None:
+    """File mode is the key's only protection when it is not PKCS#8-encrypted."""
+    (tmp_path / "keys" / "dev.pem").chmod(0o644)
+    body = (await client.get("/api/signing-material")).json()
+    sandbox = next(m for m in body if m["environment"] == "sandbox")
+    assert sandbox["privateKey"]["worldReadable"] is True
+    assert "chmod 600" in sandbox["privateKey"]["error"]
+
+
+async def test_no_endpoint_accepts_key_material_or_a_path(
+    client: httpx.AsyncClient, credential_pems
+) -> None:
     """The upload path is gone by construction, not by validation.
 
-    ProfileIn has no field that could hold key material, so a client that tries
-    to send one is simply ignored — and the profile still refers to files.
+    ProfileIn has no field for a PEM, a filename or a path, so anything a caller
+    sends along those lines is ignored outright and the profile still signs with
+    the server-configured key.
     """
     cert_pem, key_pem = credential_pems
     response = await client.post(
@@ -467,86 +476,42 @@ async def test_no_endpoint_accepts_a_pem(client: httpx.AsyncClient, credential_p
             "name": "smuggle",
             "memory_id": "D44444",
             "environment": "sandbox",
-            "certificate_file": "dev.crt",
-            "private_key_file": "dev.pem",
-            # These are not fields on the schema; they must not take effect.
+            # None of these are fields on the schema.
             "certificate_pem": cert_pem.decode(),
             "private_key_pem": key_pem.decode(),
+            "private_key_file": "../../../etc/passwd",
+            "certificate_path": "/etc/shadow",
         },
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["certificate_file"] == "dev.crt"
-    assert "private_key_pem" not in body
-    assert "certificate_pem" not in body
+    for leaked in ("private_key_pem", "certificate_pem", "private_key_file", "certificate_path"):
+        assert leaked not in body
+    # It still signs with the server's own material.
+    assert body["certificate"]["national_id"] == "14003778990"
 
 
-@pytest.mark.parametrize(
-    "attempt",
-    ["../../../etc/passwd", "/etc/passwd", "sub/dir.pem", ".hidden.pem", "..", ""],
-)
-async def test_a_key_filename_cannot_escape_the_key_directory(
-    client: httpx.AsyncClient, attempt: str
+async def test_a_profile_is_refused_when_the_server_has_no_key_configured(
+    tmp_path, credential_pems, monkeypatch, mock_transport
 ) -> None:
-    """Profile fields arrive over HTTP, so a filename is untrusted input.
+    """A misconfigured server must fail at profile creation, not at submission."""
+    from moadian.api.app import create_app as _create_app
+    from moadian.api.deps import get_profile_store, get_record_store, get_settings
 
-    Without containment, naming a path here turns profile creation into an
-    arbitrary local file read.
-    """
-    response = await client.post(
-        "/api/profiles",
-        json={
-            "name": f"traversal-{abs(hash(attempt))}",
-            "memory_id": "E55555",
-            "environment": "sandbox",
-            "certificate_file": "dev.crt",
-            "private_key_file": attempt,
-        },
+    settings = Settings(instance_dir=tmp_path)  # no certificate_path at all
+    app = _create_app()
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_profile_store] = lambda: ProfileStore(
+        tmp_path / "p.json", PASSPHRASE
     )
-    assert response.status_code in (400, 422), response.text
+    app.dependency_overrides[get_record_store] = lambda: RecordStore(tmp_path / "r.sqlite")
 
-
-async def test_a_profile_naming_a_missing_key_is_refused_at_creation(
-    client: httpx.AsyncClient,
-) -> None:
-    """Better a 400 now than a failed submission later, after a serial is at risk."""
-    response = await client.post(
-        "/api/profiles",
-        json={
-            "name": "absent",
-            "memory_id": "F66666",
-            "environment": "sandbox",
-            "certificate_file": "dev.crt",
-            "private_key_file": "not-there.pem",
-        },
-    )
-    assert response.status_code == 400
-    assert "not present in the key directory" in response.json()["detail"]
-
-
-async def test_a_mismatched_key_pair_is_refused_at_creation(
-    client: httpx.AsyncClient, tmp_path, api
-) -> None:
-    """A key that does not match its certificate authenticates to nothing."""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    (tmp_path / "keys" / "other.pem").write_bytes(
-        other.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://api"
+    ) as http:
+        response = await http.post(
+            "/api/profiles",
+            json={"name": "x", "memory_id": "H88888", "environment": "sandbox"},
         )
-    )
-    response = await client.post(
-        "/api/profiles",
-        json={
-            "name": "mismatch",
-            "memory_id": "G77777",
-            "environment": "sandbox",
-            "certificate_file": "dev.crt",
-            "private_key_file": "other.pem",
-        },
-    )
     assert response.status_code == 400
+    assert "MOADIAN_CERTIFICATE_PATH" in response.json()["detail"]

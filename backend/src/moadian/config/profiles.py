@@ -27,10 +27,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from moadian.config.environment import Environment
-from moadian.config.keyring import KeyRing
 from moadian.errors import ConfigurationError
 
-if TYPE_CHECKING:  # avoids importing crypto at module scope
+if TYPE_CHECKING:  # avoids import cycles at module scope
+    from moadian.config.settings import Settings
     from moadian.crypto import SigningCredentials
 
 __all__ = ["Profile", "ProfileStore"]
@@ -63,19 +63,17 @@ def _unb64(text: str, field: str) -> bytes:
 class Profile:
     """One fiscal memory: which environment, which identity, which key files.
 
-    Carries **filenames, never key bytes**. The signing material lives in the
-    server-side key directory (:class:`~moadian.config.keyring.KeyRing`) and is
-    placed there out of band, so a private key never appears in a request body,
-    a response, a log line or a browser. See that module for the reasoning and
-    the trade-off.
+    Carries **no key material and no path to any**. Which certificate and key a
+    profile signs with follows from its :attr:`environment` alone, resolved
+    against the process environment by
+    :meth:`~moadian.config.Settings.signing_material`. Nothing a caller sends
+    can influence which file is read, so a private key never appears in a
+    request body, a response, a log line or a browser.
     """
 
     name: str
     memory_id: str
     environment: Environment
-    #: Filenames inside the key directory — bare names, never paths.
-    certificate_file: str
-    private_key_file: str
     economic_code: str | None = None
     #: Overrides the environment's URL. For pointing tests at the in-process mock
     #: — not for reaching the real service, which lives at exactly two addresses.
@@ -108,36 +106,33 @@ class Profile:
         if self.base_url.endswith("/"):
             # URLs are built by string join, so a trailing slash yields "//api/v2".
             raise ConfigurationError(f"base_url {self.base_url!r} must not end with '/'")
-        if not self.certificate_file:
-            raise ConfigurationError("certificate_file is empty")
-        if not self.private_key_file:
-            raise ConfigurationError("private_key_file is empty")
         if self.economic_code is not None and not self.economic_code.isdigit():
             raise ConfigurationError(f"economic_code {self.economic_code!r} must be digits")
 
-    def certificate(self, keyring: KeyRing) -> x509.Certificate:
-        """Load the certificate from the key directory.
+    def certificate(self, settings: Settings) -> x509.Certificate:
+        """The certificate this profile's environment signs with.
 
-        The certificate is public — it is embedded in every JWS as ``x5c`` — so
-        reading it for display is safe. The private key is deliberately *not*
-        exposed by any method here; only :meth:`load_credentials` touches it, and
-        it returns a signing object rather than bytes.
+        Public — it is embedded in every JWS as ``x5c`` — so reading it for
+        display is safe. The private key is deliberately not exposed by any
+        method here; only :meth:`load_credentials` touches it, and it returns a
+        signing object rather than bytes.
         """
-        path = keyring.resolve(self.certificate_file)
+        material = settings.signing_material(self.environment)
+        certificate_path, _ = material.require()
         try:
-            return x509.load_pem_x509_certificate(path.read_bytes())
+            return x509.load_pem_x509_certificate(certificate_path.read_bytes())
         except (OSError, ValueError) as exc:
             raise ConfigurationError(
-                f"certificate {self.certificate_file!r} for profile {self.name!r} "
-                "is not readable PEM"
+                f"the certificate at {certificate_path} is not readable PEM"
             ) from exc
 
-    def redacted(self, keyring: KeyRing | None = None) -> dict[str, Any]:
+    def redacted(self, settings: Settings | None = None) -> dict[str, Any]:
         """A description safe to hand to a UI or a log. Carries no key material.
 
-        Without a keyring the certificate is not read, so the summary omits the
-        subject and expiry rather than failing — a profile whose files have gone
-        missing should still be listable and fixable in the admin panel.
+        Without settings the certificate is not read, so the summary omits the
+        subject and expiry rather than failing — a profile whose certificate has
+        gone missing must still be listable, or the admin panel cannot show the
+        operator what is wrong.
         """
         base: dict[str, Any] = {
             "name": self.name,
@@ -147,14 +142,12 @@ class Profile:
             "is_production": self.environment.is_production,
             "base_url": self.base_url,
             "economic_code": self.economic_code,
-            "certificate_file": self.certificate_file,
-            "private_key_file": self.private_key_file,
             "certificate": None,
         }
-        if keyring is None:
+        if settings is None:
             return base
         try:
-            cert = self.certificate(keyring)
+            cert = self.certificate(settings)
         except ConfigurationError as exc:
             base["certificate_error"] = str(exc)
             return base
@@ -168,23 +161,13 @@ class Profile:
         }
         return base
 
-    def load_credentials(self, keyring: KeyRing) -> SigningCredentials:
-        """Read the key pair from disk and return a signing object.
+    def load_credentials(self, settings: Settings) -> SigningCredentials:
+        """The signing identity for this profile's environment.
 
-        The only place private key bytes are read. They go straight into a
-        :class:`SigningCredentials` and are never returned, stored on the profile
-        or serialised. An encrypted PKCS#8 key is unlocked with the passphrase
-        from the environment.
+        Delegates to :meth:`~moadian.config.keyring.SigningMaterial.load`, the
+        one place private key bytes are read.
         """
-        from moadian.crypto import SigningCredentials as _Credentials
-
-        cert_path = keyring.resolve(self.certificate_file)
-        key_path = keyring.resolve(self.private_key_file)
-        credentials = _Credentials.from_files(
-            cert_path, key_path, key_password=keyring.passphrase()
-        )
-        credentials.assert_usable()
-        return credentials
+        return settings.signing_material(self.environment).load()
 
     def _to_json(self) -> dict[str, Any]:
         return {
@@ -192,8 +175,6 @@ class Profile:
             "memory_id": self.memory_id,
             "environment": str(self.environment),
             "base_url_override": self.base_url_override,
-            "certificate_file": self.certificate_file,
-            "private_key_file": self.private_key_file,
             "economic_code": self.economic_code,
         }
 
@@ -204,8 +185,6 @@ class Profile:
                 name=data["name"],
                 memory_id=data["memory_id"],
                 environment=Environment.parse(data["environment"]),
-                certificate_file=data["certificate_file"],
-                private_key_file=data["private_key_file"],
                 economic_code=data.get("economic_code"),
                 base_url_override=data.get("base_url_override"),
             )

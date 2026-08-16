@@ -55,17 +55,15 @@ __all__ = ["create_app"]
 class ProfileIn(BaseModel):
     """A new profile.
 
-    Carries **filenames, not key material**. The certificate and private key are
-    placed in the server-side key directory out of band; this endpoint only
-    records which of them a fiscal memory uses. There is deliberately no field
-    here that could hold a PEM.
+    Carries **no key material and no path to any**. Which certificate signs for
+    this profile follows from its environment, resolved against the server's own
+    configuration. There is deliberately no field here — not a PEM, not a
+    filename, not a path — that could influence which file is read.
     """
 
     name: str
     memory_id: str = Field(description="شناسه یکتای حافظه مالیاتی, 6 chars of A-Z0-9")
     environment: str = Field(description="sandbox | production (also tp, operational)")
-    certificate_file: str = Field(description="Filename in the server key directory")
-    private_key_file: str = Field(description="Filename in the server key directory")
     economic_code: str | None = None
     base_url_override: str | None = Field(
         default=None, description="Testing only — points at a mock instead of the real service"
@@ -249,7 +247,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         settings: Annotated[Settings, Depends(get_settings)],
     ):
         """Every configured fiscal memory. Redacted — no key material leaves here."""
-        return [store.load(name).redacted(settings.keyring) for name in store.list_names()]
+        return [store.load(name).redacted(settings) for name in store.list_names()]
 
     @app.post("/api/profiles", status_code=201, tags=["admin"])
     def create_profile(
@@ -261,39 +259,34 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
             name=body.name,
             memory_id=body.memory_id,
             environment=Environment.parse(body.environment),
-            certificate_file=body.certificate_file,
-            private_key_file=body.private_key_file,
             economic_code=body.economic_code,
             base_url_override=body.base_url_override,
         )
         profile.validate()
-        # Prove the named files exist and pair up before storing the profile.
-        # Otherwise the first failure surfaces at submission time, which is the
-        # worst moment to discover a typo in a filename.
-        profile.load_credentials(settings.keyring)
+        # Prove the configured pair exists and matches before storing the
+        # profile. Otherwise the first failure surfaces at submission time, which
+        # is the worst moment to discover the server was misconfigured.
+        profile.load_credentials(settings)
         store.save(profile)
-        return profile.redacted(settings.keyring)
+        return profile.redacted(settings)
 
     @app.get("/api/profiles/{name}", tags=["admin"])
     def read_profile(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
     ):
-        return profile.redacted(settings.keyring)
+        return profile.redacted(settings)
 
-    @app.get("/api/key-files", tags=["admin"])
-    def key_files(settings: Annotated[Settings, Depends(get_settings)]):
-        """What signing material is present on the server, by name.
+    @app.get("/api/signing-material", tags=["admin"])
+    def signing_material(settings: Annotated[Settings, Depends(get_settings)]):
+        """Whether each environment's configured certificate and key are usable.
 
-        Names and permissions only — contents are never read here. This is what
-        the admin panel offers as a picker: an operator drops files into the key
-        directory out of band and then selects them, so no key ever traverses a
-        request, a proxy or a browser.
+        Read-only status: which path is in force, whether it exists, its file
+        mode, and whether the key is group- or world-readable. Contents are never
+        read, and there is nothing here to change — signing material is set in
+        the server's environment, not through this API.
         """
-        return {
-            "directory": str(settings.key_dir),
-            **settings.keyring.list_files(),
-        }
+        return [settings.signing_material(env).describe() for env in Environment]
 
     @app.delete("/api/profiles/{name}", status_code=204, tags=["admin"])
     def delete_profile(name: str, store: Annotated[ProfileStore, Depends(get_profile_store)]):
@@ -534,7 +527,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         """Aggregated counts for the summary cards, scoped to this fiscal memory."""
         counts = store.counts_by_state(profile.name)
         return {
-            "profile": profile.redacted(settings.keyring),
+            "profile": profile.redacted(settings),
             "counts": counts,
             "recent": store.list_invoices(profile.name, limit=10),
         }
