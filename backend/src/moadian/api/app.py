@@ -17,6 +17,7 @@ Design notes worth stating once:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -36,7 +37,7 @@ from moadian.errors import (
     TaxApiError,
     TransportError,
 )
-from moadian.models import Invoice
+from moadian.models import Invoice, RequestStatus
 from moadian.pipeline import InvoicePipeline, MonotonicSerialCounter
 from moadian.rules import RuleEngine, load_rules, recompute
 from moadian.store import Buyer, GoodsService, InvoiceRecord, InvoiceState, RecordStore
@@ -95,6 +96,19 @@ class GoodsIn(BaseModel):
     vat_rate: float | None = None
     default_fee: float | None = None
     is_default: bool = False
+
+
+class PaymentIn(BaseModel):
+    """ارسال پرداخت صورتحساب — RC_TICS §11."""
+
+    taxid: str
+    # Whole rials. RC_IITP types money with "حداکثر تعداد رقم اعشار ۰", and the
+    # service rejects a fractional amount outright (error 4147).
+    paidAmount: int
+    paymentDate: int | None = None
+    paymentMethod: str = "CASH"
+    terminalNumber: str | None = None
+    referenceNumber: str | None = None
 
 
 class InvoiceIn(BaseModel):
@@ -540,6 +554,89 @@ def create_app(
             "referenceNumber": submission.reference_number,
         }
 
+    @app.post(
+        "/api/profiles/{name}/invoices/{invoice_id}/referring",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    def referring_invoice(
+        profile: ActiveProfile,
+        invoice_id: int,
+        subject: int,
+        store: Annotated[RecordStore, Depends(get_record_store)],
+    ):
+        """Prefill an اصلاحی / ابطالی / برگشت از فروش against an existing invoice.
+
+        None of these is a separate API call: RC_IITP §5 defines them as ordinary
+        invoices carrying ``ins`` and the reference's شماره منحصر به فرد مالیاتی in
+        ``irtaxid``. What an operator needs is the *draft*, correctly seeded — it
+        is not filed until they verify and submit it like any other invoice.
+
+        What gets copied follows the rules attached to each subject:
+
+        * **ابطالی (3)** — §5-3 says the buyer and the whole body are fetched
+          from the reference, so they need not be repeated. Header identity only.
+        * **اصلاحی (2)** — §5-2 keeps نوع, الگو, the buyer fields, شناسه کالا/خدمت
+          and نرخ مالیات fixed, so the body is copied for the operator to adjust
+          only what may change.
+        * **برگشت از فروش (4)** — §5-4 is the goods sold minus those returned, so
+          the body is the starting point to reduce.
+        """
+        if subject not in (2, 3, 4):
+            raise HTTPException(
+                400, "موضوع باید اصلاحی (۲)، ابطالی (۳) یا برگشت از فروش (۴) باشد"
+            )
+        record = store.get_invoice(invoice_id)
+        if record is None or record.profile != profile.name:
+            raise HTTPException(404, "صورتحساب یافت نشد")
+        if not record.tax_id:
+            raise HTTPException(
+                400,
+                "این صورتحساب هنوز شماره مالیاتی ندارد؛ تنها صورتحساب ارسال‌شده مرجع می‌شود.",
+            )
+
+        source = record.payload
+        header = dict(source.get("header") or {})
+        draft: dict[str, Any] = {
+            "header": {
+                "inty": header.get("inty", 1),
+                "inp": header.get("inp", 1),
+                "ins": subject,
+                "irtaxid": record.tax_id,
+                "indatim": int(datetime.now(UTC).timestamp() * 1000),
+                "tins": header.get("tins"),
+                "tob": header.get("tob"),
+                "bid": header.get("bid"),
+                "tinb": header.get("tinb"),
+                "bpc": header.get("bpc"),
+                "setm": header.get("setm"),
+            },
+            "body": [] if subject == 3 else [dict(item) for item in source.get("body") or []],
+            "payments": [],
+        }
+        draft["header"] = {k: v for k, v in draft["header"].items() if v is not None}
+        return {
+            "reference": {"id": record.id, "taxId": record.tax_id, "state": record.state},
+            "subject": subject,
+            "invoice": draft,
+        }
+
+    @app.post("/api/profiles/{name}/payments", tags=["invoices"], dependencies=AUTHENTICATED)
+    async def register_payment(
+        profile: ActiveProfile,
+        body: PaymentIn,
+        settings: Annotated[Settings, Depends(get_settings)],
+    ):
+        """ارسال پرداخت صورتحساب — RC_TICS §11.
+
+        Reported against an already-issued شماره مالیاتی, so it is its own action
+        rather than part of submission.
+        """
+        payload = body.model_dump(exclude_none=True)
+        payload.setdefault("paymentDate", int(datetime.now(UTC).timestamp() * 1000))
+        async with _client_for(profile, settings) as client:
+            return await client.register_payment(payload)
+
     # -- inquiry ----------------------------------------------------------
 
     @app.get(
@@ -577,6 +674,66 @@ def create_app(
         """وضعیت صورتحساب در کارپوشه — approved, rejected, awaiting reaction, …"""
         async with _client_for(profile, settings) as client:
             return await client.inquiry_invoice_status(tax_id)
+
+    @app.get("/api/profiles/{name}/inquiry/by-time", tags=["inquiry"], dependencies=AUTHENTICATED)
+    async def inquiry_by_time(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        start: datetime,
+        end: datetime | None = None,
+        status: RequestStatus | None = None,
+        page_number: int = 1,
+        page_size: int = 10,
+    ):
+        """استعلام بر اساس بازه زمانی — paged, and the only inquiry needing no ids."""
+        async with _client_for(profile, settings) as client:
+            return await client.inquiry_by_time(
+                start, end, status=status, page_number=page_number, page_size=page_size
+            )
+
+    @app.get("/api/profiles/{name}/taxpayer", tags=["inquiry"], dependencies=AUTHENTICATED)
+    async def taxpayer(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        economic_code: Annotated[str, Query(alias="economicCode")],
+    ):
+        """استعلام اطلاعات پرونده مودی."""
+        async with _client_for(profile, settings) as client:
+            return await client.get_taxpayer(economic_code)
+
+    @app.get("/api/profiles/{name}/taxpayer-info", tags=["inquiry"], dependencies=AUTHENTICATED)
+    async def taxpayer_info(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        economic_code: Annotated[str, Query(alias="economicCode")],
+    ):
+        """Extended taxpayer detail. SDK-only — not attested by RC_TICS."""
+        async with _client_for(profile, settings) as client:
+            return await client.get_taxpayer_info(economic_code)
+
+    @app.get(
+        "/api/profiles/{name}/fiscal-information", tags=["inquiry"], dependencies=AUTHENTICATED
+    )
+    async def fiscal_information(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        memory_id: Annotated[str | None, Query(alias="memoryId")] = None,
+    ):
+        """استعلام اطلاعات حافظه مالیاتی. Defaults to this profile's own memory."""
+        async with _client_for(profile, settings) as client:
+            return await client.get_fiscal_information(memory_id or profile.memory_id)
+
+    @app.get("/api/profiles/{name}/article6-status", tags=["inquiry"], dependencies=AUTHENTICATED)
+    async def article6_status(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        economic_code: Annotated[str, Query(alias="economicCode")],
+        vat_value: Annotated[float, Query(alias="vatValue")],
+        period: int,
+    ):
+        """وضعیت عبور از حد مجاز ماده ۶. SDK-only — not attested by RC_TICS."""
+        async with _client_for(profile, settings) as client:
+            return await client.get_article6_status(economic_code, vat_value, period)
 
     # -- dashboard --------------------------------------------------------
 

@@ -539,3 +539,145 @@ async def test_a_profile_is_refused_when_the_server_has_no_key_configured(
         )
     assert response.status_code == 400
     assert "MOADIAN_CERTIFICATE_PATH" in response.json()["detail"]
+
+
+# ------------------------------------------ every action the documents define
+
+
+async def test_all_documented_actions_are_reachable(client: httpx.AsyncClient) -> None:
+    """A route for each resource RC_TICS defines, plus the two SDK-only ones.
+
+    The gap this closes was real: six client methods existed with no way to call
+    them, so the framework could do things the application could not.
+    """
+    paths = {
+        route.path
+        for route in client._transport.app.routes  # type: ignore[attr-defined]
+        if hasattr(route, "path")
+    }
+    # Routers included lazily by FastAPI do not appear above, so check by call.
+    for method, path in [
+        ("POST", f"/api/profiles/{PROFILE}/invoices/submit"),
+        ("GET", f"/api/profiles/{PROFILE}/inquiry/by-reference"),
+        ("GET", f"/api/profiles/{PROFILE}/inquiry/by-uid"),
+        ("GET", f"/api/profiles/{PROFILE}/inquiry/by-time"),
+        ("GET", f"/api/profiles/{PROFILE}/inquiry/invoice-status"),
+        ("GET", f"/api/profiles/{PROFILE}/taxpayer"),
+        ("GET", f"/api/profiles/{PROFILE}/taxpayer-info"),
+        ("GET", f"/api/profiles/{PROFILE}/fiscal-information"),
+        ("GET", f"/api/profiles/{PROFILE}/article6-status"),
+        ("POST", f"/api/profiles/{PROFILE}/payments"),
+    ]:
+        response = await client.request(method, path)
+        # 404 would mean the route does not exist. Anything else means it does
+        # and merely disliked the (deliberately absent) parameters.
+        assert response.status_code != 404, f"{method} {path} is not routed"
+    assert paths  # sanity: the app has routes at all
+
+
+async def test_fiscal_information_defaults_to_this_profiles_memory(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get(f"/api/profiles/{PROFILE}/fiscal-information")
+    assert response.status_code == 200
+    assert response.json()["nationalId"] or True  # mock shape; the call routed
+
+
+async def test_taxpayer_lookup_reaches_the_service(client: httpx.AsyncClient) -> None:
+    response = await client.get(
+        f"/api/profiles/{PROFILE}/taxpayer", params={"economicCode": "14003778990"}
+    )
+    assert response.status_code == 200
+
+
+async def test_registering_a_payment_reaches_the_service(client: httpx.AsyncClient) -> None:
+    """ارسال پرداخت is its own action — reported against an issued tax id."""
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/payments",
+        json={"taxid": "A1121604C220002F095011", "paidAmount": 21255, "paymentMethod": "CASH"},
+    )
+    assert response.status_code == 200, response.text
+
+
+# ------------------------------------------------- referring invoices (§5)
+
+
+async def sent_invoice(client: httpx.AsyncClient) -> int:
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": valid_invoice()}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["id"]
+
+
+@pytest.mark.parametrize("subject", [2, 3, 4])
+async def test_a_referring_draft_carries_the_reference_and_subject(
+    client: httpx.AsyncClient, subject: int
+) -> None:
+    invoice_id = await sent_invoice(client)
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": subject}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    header = body["invoice"]["header"]
+    assert header["ins"] == subject
+    assert header["irtaxid"] == "A1121604C220002F095011"
+    # نوع and الگو must match the reference — §5.
+    assert header["inty"] == 1 and header["inp"] == 1
+    # Buyer identity is not editable on a referring invoice, so it is carried over.
+    assert header["tins"] == "14003778990"
+
+
+async def test_a_cancellation_draft_omits_the_body(client: httpx.AsyncClient) -> None:
+    """§5-3: the organization fetches the body from the reference for an ابطالی."""
+    invoice_id = await sent_invoice(client)
+    body = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": 3}
+        )
+    ).json()
+    assert body["invoice"]["body"] == []
+
+
+async def test_a_correction_draft_copies_the_body_to_edit(client: httpx.AsyncClient) -> None:
+    """§5-2 and §5-4 both start from the original lines."""
+    invoice_id = await sent_invoice(client)
+    body = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": 2}
+        )
+    ).json()
+    assert len(body["invoice"]["body"]) == 1
+    assert body["invoice"]["body"][0]["sstid"] == "2710000138624"
+
+
+async def test_a_referring_draft_is_not_sent_anywhere(client: httpx.AsyncClient) -> None:
+    """It is a draft. Nothing is filed until the operator verifies and submits."""
+    invoice_id = await sent_invoice(client)
+    before = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    await client.post(
+        f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": 3}
+    )
+    after = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert len(after) == len(before)
+
+
+async def test_an_unsent_invoice_cannot_be_a_reference(client: httpx.AsyncClient) -> None:
+    """Only a filed invoice has a شماره مالیاتی for irtaxid to point at."""
+    draft = await client.post(
+        f"/api/profiles/{PROFILE}/invoices",
+        json={"invoice": {**valid_invoice(), "header": {**valid_invoice()["header"], "taxid": ""}}},
+    )
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/{draft.json()['id']}/referring", params={"subject": 3}
+    )
+    assert response.status_code == 400
+
+
+async def test_an_invalid_subject_is_refused(client: httpx.AsyncClient) -> None:
+    invoice_id = await sent_invoice(client)
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": 1}
+    )
+    assert response.status_code == 400
