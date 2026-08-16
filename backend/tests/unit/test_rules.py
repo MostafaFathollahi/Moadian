@@ -558,3 +558,41 @@ def test_verify_names_the_missing_field_in_persian() -> None:
     result = RuleEngine().verify(invoice)
     message = next(e["message"] for e in result.errors if e["field"] == "tins")
     assert "شماره اقتصادي فروشنده" in message
+
+
+# --------------------------------------------- nested کالاهای حمل شده (الگو ۸)
+
+
+def test_shipped_goods_rows_are_checked_for_the_bill_of_lading_pattern() -> None:
+    """sg is an array nested on the header, so it needs its own obligation pass.
+
+    It was silently dropped by the loader until the full-table cross-check
+    surfaced it: the generated matrix carried the rules, nothing read them.
+    """
+    from moadian.models import ShippingGood
+
+    spec = load_rules().pattern(8)
+    assert set(spec.sg) == {"sgid", "sgt"}
+    assert spec.sg["sgid"].obligation is Obligation.REQUIRED
+
+    invoice = documented_invoice(inp=8)
+    invoice.header.sg = [ShippingGood(sgid="X1")]  # sgt missing
+    report = RuleEngine().validate(invoice)
+    assert any(
+        v.field == "sg.sgt" and v.rule == "obligation.required" for v in report.violations
+    ), [str(v) for v in report.violations]
+
+
+def test_a_complete_shipped_goods_row_passes() -> None:
+    from moadian.models import ShippingGood
+
+    invoice = documented_invoice(inp=8)
+    invoice.header.sg = [ShippingGood(sgid="X1", sgt="کالای حمل‌شده")]
+    report = RuleEngine().validate(invoice)
+    assert not any(v.field.startswith("sg.") for v in report.violations)
+
+
+def test_other_patterns_do_not_demand_shipped_goods() -> None:
+    """الگوی اول has no bill of lading, so an empty sg must not be an error."""
+    report = RuleEngine().validate(documented_invoice(inp=1))
+    assert not any(v.field.startswith("sg.") for v in report.violations)

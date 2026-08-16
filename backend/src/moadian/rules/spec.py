@@ -96,14 +96,25 @@ class PatternSpec:
     header: dict[str, FieldRule]
     body: dict[str, FieldRule]
     payment: dict[str, FieldRule] = field(default_factory=dict)
+    #: Fields of the nested کالاهای حمل شده array (الگوی بارنامه). A sub-object
+    #: rather than a top-level section, which is why it needs its own slot.
+    sg: dict[str, FieldRule] = field(default_factory=dict)
     #: انواع صورتحساب this pattern is defined for, per the two header bands.
     types: tuple[int, ...] = (1,)
     reference: str = ""
     coverage: str = "partial"
     coverage_note: str = ""
 
+    #: The sections an invoice actually has, in wire order.
+    SECTIONS = ("header", "body", "payment", "sg")
+
     def section(self, name: str) -> dict[str, FieldRule]:
-        return {"header": self.header, "body": self.body, "payment": self.payment}[name]
+        return {
+            "header": self.header,
+            "body": self.body,
+            "payment": self.payment,
+            "sg": self.sg,
+        }[name]
 
     @property
     def is_complete(self) -> bool:
@@ -209,7 +220,7 @@ def load_rules(path: Path | None = None) -> RuleSet:
     for number, spec in (raw.get("patterns") or {}).items():
         sections = {
             name: _field_rules(spec.get(name), name, int(number), spec.get("reference", ""))
-            for name in ("header", "body", "payment")
+            for name in ("header", "body", "payment", "sg")
         }
         # `excluded` lists the fields جدول ۱ marks as not belonging to this
         # pattern. Expanded into real rules here so the engine can report them,
@@ -230,6 +241,7 @@ def load_rules(path: Path | None = None) -> RuleSet:
             header=sections["header"],
             body=sections["body"],
             payment=sections["payment"],
+            sg=sections["sg"],
             types=tuple(int(t) for t in (spec.get("types") or [1])),
             reference=spec.get("reference", ""),
             coverage=spec.get("coverage", "partial"),

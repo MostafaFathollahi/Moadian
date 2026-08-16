@@ -6,9 +6,9 @@ systematic error in it — a mis-mapped column band, a shifted row — would pro
 a matrix that is confidently and uniformly wrong.
 
 ``table1_ocr_crosscheck.json`` is the same table read by an unrelated OCR pass,
-covering rows 1-53. Comparing the two catches exactly the class of error that
-anchors against §8 cannot: anchors verify a handful of cells we happened to read
-in prose, whereas this verifies every cell in the overlap.
+covering **every row, 1-102**. Comparing the two catches exactly the class of
+error that anchors against §8 cannot: anchors verify a handful of cells we
+happened to read in prose, whereas this verifies the whole matrix.
 
 The fixture is committed rather than regenerated from ``Docs/`` so the check runs
 on every clone. A test that needs a 5 MB PDF present is a test that quietly
@@ -40,20 +40,23 @@ def crosscheck() -> dict:
 
 def obligation_of(pattern_spec, wire: str, invoice_type: int) -> str:
     """What patterns.yaml says, in the vocabulary the fixture uses."""
-    for section in ("header", "body", "payment", "sg"):
-        rule = pattern_spec.section(section).get(wire) if section != "sg" else None
+    for section in pattern_spec.SECTIONS:
+        rule = pattern_spec.section(section).get(wire)
         if rule is not None:
             return str(rule.for_type(invoice_type))
     return str(Obligation.NOT_APPLICABLE)
 
 
-def test_the_fixture_covers_the_documented_range(crosscheck: dict) -> None:
-    assert len(crosscheck["rows"]) == 53, "the OCR pass covered rows 1-53"
+def test_the_fixture_covers_the_whole_table(crosscheck: dict) -> None:
+    """All 102 rows of جدول ۱, not a sample."""
+    assert len(crosscheck["rows"]) == 102
     assert len(crosscheck["_columns"]) == 16
+    codes = sorted(entry["code"] for entry in crosscheck["rows"].values())
+    assert codes == list(range(1, 103))
 
 
 def test_every_transcribed_cell_agrees_with_the_independent_ocr(crosscheck: dict) -> None:
-    """848 cells, two unrelated extraction methods. Any disagreement is a defect.
+    """1,632 cells, two unrelated extraction methods. Any disagreement is a defect.
 
     If this fails, do not "fix" it by editing the fixture — open the PDF at p.14
     and settle which reading is right, because at that point neither source is
@@ -77,7 +80,7 @@ def test_every_transcribed_cell_agrees_with_the_independent_ocr(crosscheck: dict
                     f"patterns.yaml={actual} ocr={expected}"
                 )
 
-    assert compared >= 800, f"only {compared} cells compared; the fixture may be truncated"
+    assert compared >= 1600, f"only {compared} cells compared; the fixture may be truncated"
     assert not disagreements, "\n".join(disagreements)
 
 

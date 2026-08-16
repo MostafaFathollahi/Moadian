@@ -144,6 +144,25 @@ class RuleEngine:
                 )
             )
 
+        # کالاهای حمل شده is a nested array on the header, not a top-level
+        # section, so it needs its own pass — the loop below walks body lines.
+        for index, shipped in enumerate(invoice.header.sg or []):
+            present = shipped.model_dump(exclude_none=True, by_alias=True)
+            for name, rule in spec.sg.items():
+                if rule.for_type(invoice_type) is not Obligation.REQUIRED:
+                    continue
+                if name not in present:
+                    violations.append(
+                        Violation(
+                            field=f"sg.{name}",
+                            line=index,
+                            rule="obligation.required",
+                            message=rule.default_message,
+                            reference=rule.reference,
+                            context={"title": rule.title},
+                        )
+                    )
+
         for index, item in enumerate(invoice.body):
             present = item.model_dump(exclude_none=True, by_alias=True)
             for name, rule in spec.body.items():
