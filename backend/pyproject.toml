@@ -15,6 +15,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "PyYAML>=6.0",
+    "PyJWT>=2.9",
 ]
 
 [project.optional-dependencies]
@@ -41,3 +42,6 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008 flags `Depends(...)` in a default argument, which is exactly how FastAPI
+# declares dependencies. The rule predates that idiom.
+ignore = ["B008"]

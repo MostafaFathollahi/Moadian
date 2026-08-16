@@ -18,6 +18,7 @@ from moadian.api.deps import (
     get_rule_engine,
     get_settings,
 )
+from moadian.auth import UserStore
 from moadian.config import Environment, Profile, ProfileStore, Settings
 from moadian.mock.server import create_mock_app
 from moadian.rules import RuleEngine
@@ -66,7 +67,7 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
         )
     )
 
-    app = create_app()
+    app = create_app(users=UserStore(tmp_path / "users.sqlite"))
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_profile_store] = lambda: profiles
     app.dependency_overrides[get_record_store] = lambda: records
@@ -85,6 +86,25 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
 
 @pytest.fixture
 async def client(api):
+    """Signed in as the seeded admin.
+
+    Every business route requires a session, so a fixture that did not
+    authenticate would test the 401 path and nothing else.
+    """
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=api), base_url="http://api"
+    ) as http:
+        response = await http.post(
+            "/api/auth/login", json={"username": "admin", "password": "admin1234"}
+        )
+        assert response.status_code == 200, response.text
+        http.headers["Authorization"] = f"Bearer {response.json()['token']}"
+        yield http
+
+
+@pytest.fixture
+async def anonymous(api):
+    """No session — for asserting that routes actually refuse one."""
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=api), base_url="http://api"
     ) as http:
@@ -499,7 +519,7 @@ async def test_a_profile_is_refused_when_the_server_has_no_key_configured(
     from moadian.api.deps import get_profile_store, get_record_store, get_settings
 
     settings = Settings(instance_dir=tmp_path)  # no certificate_path at all
-    app = _create_app()
+    app = _create_app(users=UserStore(tmp_path / "users2.sqlite"))
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_profile_store] = lambda: ProfileStore(
         tmp_path / "p.json", PASSPHRASE
@@ -509,6 +529,10 @@ async def test_a_profile_is_refused_when_the_server_has_no_key_configured(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://api"
     ) as http:
+        session = await http.post(
+            "/api/auth/login", json={"username": "admin", "password": "admin1234"}
+        )
+        http.headers["Authorization"] = f"Bearer {session.json()['token']}"
         response = await http.post(
             "/api/profiles",
             json={"name": "x", "memory_id": "H88888", "environment": "sandbox"},

@@ -17,12 +17,15 @@ Design notes worth stating once:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from moadian.auth import UserStore, auth_router, current_user, seed_users, users_router
+from moadian.auth.security import admin_user
 from moadian.client import MoadianClient
 from moadian.config import Environment, Profile, ProfileStore, Settings
 from moadian.errors import (
@@ -47,6 +50,11 @@ from .deps import (
 )
 
 __all__ = ["create_app"]
+
+# Applied to every route rather than repeated inline: this API signs and submits
+# tax invoices, so "authenticated by default" has to be the shape of the file.
+AUTHENTICATED = [Depends(current_user)]
+ADMIN_ONLY = [Depends(admin_user)]
 
 
 # ------------------------------------------------------------------ schemas
@@ -115,7 +123,11 @@ def _pipeline_for(
     )
 
 
-def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
+def create_app(
+    *,
+    cors_origins: list[str] | None = None,
+    users: UserStore | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="Moadian",
         description="صدور و ارسال صورتحساب الکترونیکی — سامانه مودیان",
@@ -125,6 +137,15 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     # The UI is served separately in development, so the dev origin needs to be
     # allowed explicitly. Defaults to Vite's port and nothing else — a wildcard
     # here would let any page in the browser drive an invoice-signing API.
+    # Accounts live beside the invoice records but in their own database — see
+    # moadian.auth.store for why. Seeded so a fresh install has a way in.
+    settings = get_settings()
+    app.state.users = users or UserStore(Path(settings.instance_dir) / "users.sqlite")
+    seed_users(app.state.users)
+
+    app.include_router(auth_router)
+    app.include_router(users_router)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins or ["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -185,7 +206,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- metadata: what the UI needs to build its forms -------------------
 
-    @app.get("/api/environments", tags=["metadata"])
+    @app.get("/api/environments", tags=["metadata"], dependencies=AUTHENTICATED)
     def environments() -> list[dict[str, Any]]:
         """The two deployments, for the environment switcher."""
         return [
@@ -199,7 +220,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
             for env in Environment
         ]
 
-    @app.get("/api/patterns", tags=["metadata"])
+    @app.get("/api/patterns", tags=["metadata"], dependencies=AUTHENTICATED)
     def patterns() -> list[dict[str, Any]]:
         """الگوهای صورتحساب, with the invoice types each supports."""
         rules = load_rules()
@@ -214,7 +235,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
             for spec in sorted(rules.patterns.values(), key=lambda s: s.number)
         ]
 
-    @app.get("/api/patterns/{number}/fields", tags=["metadata"])
+    @app.get("/api/patterns/{number}/fields", tags=["metadata"], dependencies=AUTHENTICATED)
     def pattern_fields(number: int, invoice_type: int = Query(1, alias="type")):
         """Per-field obligations and Persian labels — the entry form is a projection of this.
 
@@ -241,7 +262,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- profiles ---------------------------------------------------------
 
-    @app.get("/api/profiles", tags=["admin"])
+    @app.get("/api/profiles", tags=["admin"], dependencies=AUTHENTICATED)
     def list_profiles(
         store: Annotated[ProfileStore, Depends(get_profile_store)],
         settings: Annotated[Settings, Depends(get_settings)],
@@ -249,7 +270,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         """Every configured fiscal memory. Redacted — no key material leaves here."""
         return [store.load(name).redacted(settings) for name in store.list_names()]
 
-    @app.post("/api/profiles", status_code=201, tags=["admin"])
+    @app.post("/api/profiles", status_code=201, tags=["admin"], dependencies=ADMIN_ONLY)
     def create_profile(
         body: ProfileIn,
         store: Annotated[ProfileStore, Depends(get_profile_store)],
@@ -270,14 +291,14 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         store.save(profile)
         return profile.redacted(settings)
 
-    @app.get("/api/profiles/{name}", tags=["admin"])
+    @app.get("/api/profiles/{name}", tags=["admin"], dependencies=AUTHENTICATED)
     def read_profile(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
     ):
         return profile.redacted(settings)
 
-    @app.get("/api/signing-material", tags=["admin"])
+    @app.get("/api/signing-material", tags=["admin"], dependencies=ADMIN_ONLY)
     def signing_material(settings: Annotated[Settings, Depends(get_settings)]):
         """Whether each environment's configured certificate and key are usable.
 
@@ -288,11 +309,11 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         """
         return [settings.signing_material(env).describe() for env in Environment]
 
-    @app.delete("/api/profiles/{name}", status_code=204, tags=["admin"])
+    @app.delete("/api/profiles/{name}", status_code=204, tags=["admin"], dependencies=ADMIN_ONLY)
     def delete_profile(name: str, store: Annotated[ProfileStore, Depends(get_profile_store)]):
         store.delete(name)
 
-    @app.post("/api/profiles/{name}/test-connection", tags=["admin"])
+    @app.post("/api/profiles/{name}/test-connection", tags=["admin"], dependencies=ADMIN_ONLY)
     async def test_connection(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
@@ -332,14 +353,19 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- reference data ---------------------------------------------------
 
-    @app.get("/api/profiles/{name}/buyers", tags=["reference"])
+    @app.get("/api/profiles/{name}/buyers", tags=["reference"], dependencies=AUTHENTICATED)
     def list_buyers(
         profile: ActiveProfile,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
         return store.list_buyers(profile.name)
 
-    @app.post("/api/profiles/{name}/buyers", status_code=201, tags=["reference"])
+    @app.post(
+        "/api/profiles/{name}/buyers",
+        status_code=201,
+        tags=["reference"],
+        dependencies=AUTHENTICATED,
+    )
     def add_buyer(
         profile: ActiveProfile,
         body: BuyerIn,
@@ -347,7 +373,12 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     ):
         return store.add_buyer(profile.name, Buyer(**body.model_dump()))
 
-    @app.delete("/api/profiles/{name}/buyers/{buyer_id}", status_code=204, tags=["reference"])
+    @app.delete(
+        "/api/profiles/{name}/buyers/{buyer_id}",
+        status_code=204,
+        tags=["reference"],
+        dependencies=AUTHENTICATED,
+    )
     def delete_buyer(
         profile: ActiveProfile,
         buyer_id: int,
@@ -355,14 +386,19 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     ):
         store.delete_buyer(profile.name, buyer_id)
 
-    @app.get("/api/profiles/{name}/goods", tags=["reference"])
+    @app.get("/api/profiles/{name}/goods", tags=["reference"], dependencies=AUTHENTICATED)
     def list_goods(
         profile: ActiveProfile,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
         return store.list_goods(profile.name)
 
-    @app.post("/api/profiles/{name}/goods", status_code=201, tags=["reference"])
+    @app.post(
+        "/api/profiles/{name}/goods",
+        status_code=201,
+        tags=["reference"],
+        dependencies=AUTHENTICATED,
+    )
     def add_goods(
         profile: ActiveProfile,
         body: GoodsIn,
@@ -370,7 +406,11 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     ):
         return store.add_goods(profile.name, GoodsService(**body.model_dump()))
 
-    @app.post("/api/profiles/{name}/goods/{goods_id}/default", tags=["reference"])
+    @app.post(
+        "/api/profiles/{name}/goods/{goods_id}/default",
+        tags=["reference"],
+        dependencies=AUTHENTICATED,
+    )
     def make_default(
         profile: ActiveProfile,
         goods_id: int,
@@ -379,7 +419,12 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         store.set_default_goods(profile.name, goods_id)
         return {"ok": True}
 
-    @app.delete("/api/profiles/{name}/goods/{goods_id}", status_code=204, tags=["reference"])
+    @app.delete(
+        "/api/profiles/{name}/goods/{goods_id}",
+        status_code=204,
+        tags=["reference"],
+        dependencies=AUTHENTICATED,
+    )
     def delete_goods(
         profile: ActiveProfile,
         goods_id: int,
@@ -389,7 +434,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- invoices ---------------------------------------------------------
 
-    @app.post("/api/profiles/{name}/invoices/verify", tags=["invoices"])
+    @app.post("/api/profiles/{name}/invoices/verify", tags=["invoices"], dependencies=AUTHENTICATED)
     def verify_invoice(
         profile: ActiveProfile,
         invoice: Annotated[Invoice, Body(embed=True)],
@@ -398,7 +443,11 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         """اعتبارسنجی — every rule we can check offline, before anything is sent."""
         return engine.verify(invoice).as_dict()
 
-    @app.post("/api/profiles/{name}/invoices/recompute", tags=["invoices"])
+    @app.post(
+        "/api/profiles/{name}/invoices/recompute",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
     def recompute_invoice(
         profile: ActiveProfile,
         invoice: Annotated[Invoice, Body(embed=True)],
@@ -407,7 +456,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         pattern = invoice.header.inp or 1
         return recompute(invoice, pattern).to_wire_dict()
 
-    @app.get("/api/profiles/{name}/invoices", tags=["invoices"])
+    @app.get("/api/profiles/{name}/invoices", tags=["invoices"], dependencies=AUTHENTICATED)
     def list_invoices(
         profile: ActiveProfile,
         store: Annotated[RecordStore, Depends(get_record_store)],
@@ -416,7 +465,12 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     ):
         return store.list_invoices(profile.name, state=state, limit=limit)
 
-    @app.post("/api/profiles/{name}/invoices", status_code=201, tags=["invoices"])
+    @app.post(
+        "/api/profiles/{name}/invoices",
+        status_code=201,
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
     def save_invoice(
         profile: ActiveProfile,
         body: InvoiceIn,
@@ -439,7 +493,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         store.save_invoice(record)
         return {"id": record.id, "state": record.state, "verification": report.as_dict()}
 
-    @app.post("/api/profiles/{name}/invoices/submit", tags=["invoices"])
+    @app.post("/api/profiles/{name}/invoices/submit", tags=["invoices"], dependencies=AUTHENTICATED)
     async def submit_invoice(
         profile: ActiveProfile,
         body: InvoiceIn,
@@ -488,7 +542,11 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- inquiry ----------------------------------------------------------
 
-    @app.get("/api/profiles/{name}/inquiry/by-reference", tags=["inquiry"])
+    @app.get(
+        "/api/profiles/{name}/inquiry/by-reference",
+        tags=["inquiry"],
+        dependencies=AUTHENTICATED,
+    )
     async def inquiry_by_reference(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
@@ -497,7 +555,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         async with _client_for(profile, settings) as client:
             return await client.inquiry_by_reference_id(reference)
 
-    @app.get("/api/profiles/{name}/inquiry/by-uid", tags=["inquiry"])
+    @app.get("/api/profiles/{name}/inquiry/by-uid", tags=["inquiry"], dependencies=AUTHENTICATED)
     async def inquiry_by_uid(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
@@ -506,7 +564,11 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
         async with _client_for(profile, settings) as client:
             return await client.inquiry_by_uid(uid, profile.memory_id)
 
-    @app.get("/api/profiles/{name}/inquiry/invoice-status", tags=["inquiry"])
+    @app.get(
+        "/api/profiles/{name}/inquiry/invoice-status",
+        tags=["inquiry"],
+        dependencies=AUTHENTICATED,
+    )
     async def inquiry_invoice_status(
         profile: ActiveProfile,
         settings: Annotated[Settings, Depends(get_settings)],
@@ -518,7 +580,7 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
     # -- dashboard --------------------------------------------------------
 
-    @app.get("/api/profiles/{name}/dashboard", tags=["dashboard"])
+    @app.get("/api/profiles/{name}/dashboard", tags=["dashboard"], dependencies=AUTHENTICATED)
     def dashboard(
         profile: ActiveProfile,
         store: Annotated[RecordStore, Depends(get_record_store)],
