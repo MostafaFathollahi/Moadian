@@ -127,6 +127,17 @@ class MoadianClient:
         self.authenticator = NonceAuthenticator(
             self._http, base_url, signatory, client_id, time_to_live=time_to_live
         )
+        self._signatory = signatory
+
+    @property
+    def signatory(self) -> Signatory:
+        """The identity this client signs with.
+
+        Exposed so a caller that already has a configured client — the API layer
+        building a pipeline, say — does not have to carry the signatory alongside
+        it and risk the two disagreeing.
+        """
+        return self._signatory
 
     @classmethod
     def from_settings(
