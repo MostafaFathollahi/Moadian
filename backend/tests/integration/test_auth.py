@@ -338,3 +338,72 @@ def test_seeding_skips_entries_that_would_be_rejected(tmp_path) -> None:
     store = UserStore(tmp_path / "u.sqlite")
     assert seed_users(store, "ab:short:admin,,good.name:longenough1:user") == 1
     assert [u.username for u in store.list()] == ["good.name"]
+
+
+# --------------------------------------------------- configuration reaches us
+
+
+def test_settings_carry_the_auth_configuration(tmp_path, monkeypatch) -> None:
+    """A value in .env must reach the auth module.
+
+    pydantic-settings parses .env into a Settings object and never into
+    os.environ, so anything reading the environment directly ignores the file
+    entirely. That mismatch made a copied .env.example produce a 500 on the
+    first request, which is the least diagnosable failure available.
+    """
+    from moadian.auth.security import configure, secret_key, seed_users, token_ttl_hours
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "MOADIAN_APP_SECRET=from-the-dotenv-file\n"
+        "MOADIAN_TOKEN_TTL_HOURS=48\n"
+        "MOADIAN_MASTER_PASSPHRASE=from-the-dotenv-file\n"
+        "MOADIAN_SEED_USERS=fromenv:fromenvpass1:admin\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    for name in ("MOADIAN_APP_SECRET", "MOADIAN_TOKEN_TTL_HOURS", "MOADIAN_SEED_USERS"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings()
+    assert settings.master_passphrase == "from-the-dotenv-file"
+
+    configure(settings)
+    try:
+        assert secret_key() == "from-the-dotenv-file"
+        assert token_ttl_hours() == 48
+        store = UserStore(tmp_path / "u.sqlite")
+        assert seed_users(store) == 1
+        assert store.by_username("fromenv") is not None
+    finally:
+        configure(None)
+
+
+def test_an_exported_variable_still_wins_without_a_dotenv(monkeypatch) -> None:
+    """Deployments that never write a .env must keep working."""
+    from moadian.auth.security import configure, secret_key
+
+    configure(None)
+    monkeypatch.setenv("MOADIAN_APP_SECRET", "exported-secret")
+    try:
+        assert secret_key() == "exported-secret"
+    finally:
+        configure(None)
+
+
+async def test_a_missing_master_passphrase_says_what_to_set(tmp_path, users) -> None:
+    """503 naming the variable, not a bare 500 the operator cannot act on."""
+    from moadian.api.app import create_app as _create_app
+    from moadian.api.deps import get_settings as _get_settings
+
+    application = _create_app(users=users)
+    application.dependency_overrides[_get_settings] = lambda: Settings(
+        instance_dir=tmp_path, master_passphrase=None
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application), base_url="http://t"
+    ) as client:
+        token = await sign_in(client, ADMIN)
+        response = await client.get("/api/profiles", headers=bearer(token))
+    assert response.status_code == 503
+    assert "MOADIAN_MASTER_PASSPHRASE" in response.json()["detail"]

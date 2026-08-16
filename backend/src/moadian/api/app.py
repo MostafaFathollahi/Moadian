@@ -27,8 +27,10 @@ from pydantic import BaseModel, Field
 
 from moadian.auth import UserStore, auth_router, current_user, seed_users, users_router
 from moadian.auth.security import admin_user
+from moadian.auth.security import configure as configure_auth
 from moadian.client import MoadianClient
 from moadian.config import Environment, Profile, ProfileStore, Settings
+from moadian.config.keyring import set_passphrase as set_key_passphrase
 from moadian.errors import (
     ConfigurationError,
     CryptographyError,
@@ -154,6 +156,11 @@ def create_app(
     # Accounts live beside the invoice records but in their own database — see
     # moadian.auth.store for why. Seeded so a fresh install has a way in.
     settings = get_settings()
+    # pydantic-settings parses .env into this object and never into os.environ,
+    # so anything reading the environment directly would silently ignore the
+    # file. Hand the loaded values to the modules that need them instead.
+    configure_auth(settings)
+    set_key_passphrase(settings.key_passphrase)
     app.state.users = users or UserStore(Path(settings.instance_dir) / "users.sqlite")
     seed_users(app.state.users)
 

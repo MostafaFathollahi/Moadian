@@ -64,7 +64,16 @@ function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
       })
       setError(null)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : String(cause))
+      // Show whatever happened. An unexpected error type used to fall through
+      // as an empty page with a working sidebar and nothing in it.
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : String(cause),
+      )
+      setProfiles([])
     } finally {
       setLoading(false)
     }

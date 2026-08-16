@@ -34,6 +34,22 @@ class Settings(BaseSettings):
     # Holds the profile store, the taxid serial counter, and cached server keys.
     instance_dir: Path = Path("instance")
 
+    #: Unlocks the encrypted profile store. Required — the API cannot read any
+    #: fiscal memory without it.
+    master_passphrase: str | None = None
+
+    #: Passphrase of an encrypted PKCS#8 private key, if the key is encrypted.
+    key_passphrase: str | None = None
+
+    #: Signs this application's own session tokens. NOT the tax-API signing key.
+    #: Unset means a random value per process: safe, but every restart signs
+    #: everyone out.
+    app_secret: str | None = None
+    token_ttl_hours: int = 12
+
+    #: Accounts created at first start, as "user:pass:role,user:pass:role".
+    seed_users: str = "admin:admin1234:admin"
+
     #: Signing material. Set from the environment at startup and never from a
     #: request — see moadian.config.keyring for why. The bare pair is the default
     #: for both environments; the per-environment pairs override it, which is what

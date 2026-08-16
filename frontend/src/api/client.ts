@@ -80,8 +80,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T
 
   const text = await response.text()
-  const body = text ? JSON.parse(text) : null
-  if (!response.ok) throw new ApiError(describe(response.status, body), response.status, body)
+
+  // Not every failure is JSON. A 500 from Starlette is the bare string
+  // "Internal Server Error", and a proxy or gateway in front can return HTML.
+  // Parsing before checking response.ok turned those into an unreadable
+  // "Unexpected token 'I'" SyntaxError that escaped every caller's catch,
+  // leaving the UI blank instead of showing what went wrong.
+  let body: unknown = null
+  let parsed = true
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    parsed = false
+  }
+
+  if (!response.ok) {
+    const message = parsed
+      ? describe(response.status, body)
+      : text.trim().slice(0, 200) || `خطای ${response.status}`
+    throw new ApiError(message, response.status, parsed ? body : text)
+  }
+  if (!parsed) {
+    throw new ApiError('پاسخ سرور قابل خواندن نبود.', response.status, text)
+  }
   return body as T
 }
 

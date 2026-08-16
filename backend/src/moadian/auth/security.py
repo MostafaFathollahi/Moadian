@@ -64,30 +64,53 @@ SEED_ENV = "MOADIAN_SEED_USERS"
 DEFAULT_SEED = "admin:admin1234:admin"
 
 
+_EPHEMERAL_SECRET: str | None = None
+
+#: Set once at startup by :func:`configure`. Reading through this rather than
+#: os.environ is what makes a value in `.env` work: pydantic-settings parses
+#: that file into a Settings object and never touches the process environment,
+#: so anything reading os.environ directly silently ignores it.
+_SETTINGS: object | None = None
+
+
+def configure(settings: object) -> None:
+    """Point this module at the loaded settings. Called by :func:`create_app`."""
+    global _SETTINGS
+    _SETTINGS = settings
+
+
+def _setting(name: str, default=None):
+    value = getattr(_SETTINGS, name, None) if _SETTINGS is not None else None
+    if value is None:
+        # An exported variable still wins, for deployments that never write a
+        # .env file at all.
+        env = {"app_secret": SECRET_ENV, "token_ttl_hours": TTL_ENV, "seed_users": SEED_ENV}
+        raw = os.environ.get(env[name]) if name in env else None
+        return raw if raw is not None else default
+    return value
+
+
 def secret_key() -> str:
     """The token-signing secret.
 
     Defaults to a random value per process rather than a hardcoded literal: a
     known default secret in a shipped app lets anyone mint an admin token. The
-    cost is that tokens do not survive a restart unless the variable is set,
-    which is the safer way round for something that signs tax invoices.
+    cost is that tokens do not survive a restart unless it is configured, which
+    is the safer way round for something that signs tax invoices.
     """
-    configured = os.environ.get(SECRET_ENV)
+    configured = _setting("app_secret")
     if configured:
-        return configured
+        return str(configured)
     global _EPHEMERAL_SECRET
     if _EPHEMERAL_SECRET is None:
         _EPHEMERAL_SECRET = secrets.token_hex(32)
     return _EPHEMERAL_SECRET
 
 
-_EPHEMERAL_SECRET: str | None = None
-
-
 def token_ttl_hours() -> int:
     try:
-        return int(os.environ.get(TTL_ENV, "12"))
-    except ValueError:
+        return int(_setting("token_ttl_hours", 12))
+    except (TypeError, ValueError):
         return 12
 
 
@@ -212,7 +235,7 @@ def seed_users(store, spec: str | None = None) -> int:
     Without this a fresh install has no way in. Existing users are never
     overwritten, so changing the variable cannot silently reset a password.
     """
-    spec = spec if spec is not None else os.environ.get(SEED_ENV, DEFAULT_SEED)
+    spec = spec if spec is not None else str(_setting("seed_users", DEFAULT_SEED))
     created = 0
     for entry in spec.split(","):
         entry = entry.strip()

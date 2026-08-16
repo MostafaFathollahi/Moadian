@@ -154,7 +154,18 @@ def _status(path: Path | None, *, expect_private: bool = False) -> MaterialStatu
     )
 
 
+#: Set by :func:`moadian.auth.security.configure`-style wiring in create_app, so
+#: a value in `.env` reaches this module. See that function for why reading
+#: os.environ directly is not enough.
+_CONFIGURED_PASSPHRASE: str | None = None
+
+
+def set_passphrase(value: str | None) -> None:
+    global _CONFIGURED_PASSPHRASE
+    _CONFIGURED_PASSPHRASE = value
+
+
 def passphrase() -> bytes | None:
     """The PKCS#8 passphrase, if the private key is encrypted at rest."""
-    value = os.environ.get(KEY_PASSPHRASE_ENV)
+    value = _CONFIGURED_PASSPHRASE or os.environ.get(KEY_PASSPHRASE_ENV)
     return value.encode() if value else None

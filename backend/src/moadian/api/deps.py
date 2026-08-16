@@ -43,13 +43,17 @@ def get_settings() -> Settings:
 
 @lru_cache(maxsize=1)
 def get_profile_store() -> ProfileStore:
-    passphrase = os.environ.get(PASSPHRASE_ENV)
-    if not passphrase:
-        raise RuntimeError(
-            f"{PASSPHRASE_ENV} is not set. It unlocks the encrypted profile store; "
-            "without it the signing keys cannot be read."
-        )
     settings = get_settings()
+    # settings first, so a value in .env works; an exported variable still wins
+    # for deployments that never write one.
+    passphrase = settings.master_passphrase or os.environ.get(PASSPHRASE_ENV)
+    if not passphrase:
+        raise HTTPException(
+            503,
+            f"{PASSPHRASE_ENV} تنظیم نشده است. این مقدار مخزن رمزگذاری‌شده حافظه‌های "
+            "مالیاتی را باز می‌کند و بدون آن هیچ حافظه‌ای قابل خواندن نیست. آن را در "
+            "فایل .env یا در متغیرهای محیطی سرور تنظیم کنید.",
+        )
     return ProfileStore(settings.profile_store_path, passphrase)
 
 
