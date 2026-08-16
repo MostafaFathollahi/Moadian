@@ -144,10 +144,11 @@ def check_environment(env: Environment, ttl: int, timeout: float) -> dict[str, A
 
     nonce, exp_date = body.get("nonce", ""), body.get("expDate", "")
     nonce_check["nonce_shape_ok"] = bool(NONCE_RE.match(nonce))
+    shape = "matches" if nonce_check["nonce_shape_ok"] else "DOES NOT match"
     _line(
         OK if nonce_check["nonce_shape_ok"] else BAD,
         "nonce shape",
-        f"{nonce!r} " + ("matches <uuid>-<epochMillis>" if nonce_check["nonce_shape_ok"] else "DOES NOT match <uuid>-<epochMillis>"),
+        f"{nonce!r} {shape} <uuid>-<epochMillis>",
     )
 
     parsed = parse_exp_date(exp_date)

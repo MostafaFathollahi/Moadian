@@ -220,7 +220,7 @@ def test_a_missing_required_header_field_is_reported(missing: str) -> None:
     ), f"{missing} was not reported as required"
 
 
-@pytest.mark.parametrize("missing", ["sstid", "sstt", "mu", "vra"])
+@pytest.mark.parametrize("missing", ["sstid", "am", "fee", "vra", "vam", "tsstam"])
 def test_a_missing_required_body_field_is_reported(missing: str) -> None:
     invoice = documented_invoice()
     setattr(invoice.body[0], missing, None)
@@ -229,18 +229,47 @@ def test_a_missing_required_body_field_is_reported(missing: str) -> None:
 
 
 def test_an_optional_field_may_be_absent() -> None:
-    """tdis is اختیاری — dropping it must not produce an obligation error."""
+    """tdis is اختیاری per §8-14 — dropping it must not produce an obligation error."""
     invoice = documented_invoice()
     invoice.header.tdis = None
-    invoice.body[0].dis = None
-    invoice.header.tadis = 20_000
-    invoice.body[0].adis = 20_000
-    invoice.body[0].vam = 1_800
-    invoice.body[0].tsstam = 21_800
-    invoice.header.tvam = 1_800
-    invoice.header.tbill = 21_800
     report = RuleEngine().validate(invoice)
-    assert not any(v.rule.startswith("obligation") for v in report.violations)
+    assert not any(
+        v.rule.startswith("obligation") and v.field == "tdis" for v in report.violations
+    )
+
+
+@pytest.mark.parametrize("optional_field", ["sstt", "mu"])
+def test_description_and_unit_are_optional_not_required(optional_field: str) -> None:
+    """Locks in a correction.
+
+    A hand-written first cut of the matrix guessed شرح کالا/خدمت and واحد
+    اندازه‌گیری were اجباری. جدول ۱ says اختیاری for الگوی اول. Guessing would have
+    produced a confident, wrong rejection in the entry form.
+    """
+    invoice = documented_invoice()
+    setattr(invoice.body[0], optional_field, None)
+    report = RuleEngine().validate(invoice)
+    assert not any(v.field == optional_field for v in report.violations)
+
+
+def test_discount_amount_is_required_not_optional() -> None:
+    """The other half of that correction: مبلغ تخفیف is اجباری, and was guessed optional."""
+    invoice = documented_invoice()
+    invoice.body[0].dis = None
+    report = RuleEngine().validate(invoice)
+    assert any(
+        v.field == "dis" and v.rule == "obligation.required" for v in report.violations
+    )
+
+
+def test_total_other_taxes_is_required_for_pattern_1() -> None:
+    """todam is اجباری per جدول ۱, though §8-17 only says «با توجه به الگو»."""
+    invoice = documented_invoice()
+    invoice.header.todam = None
+    assert any(
+        v.field == "todam" and v.rule == "obligation.required"
+        for v in RuleEngine().validate(invoice).violations
+    )
 
 
 def test_an_empty_body_is_rejected() -> None:
@@ -323,19 +352,28 @@ def test_export_pattern_requires_a_zero_vat_rate() -> None:
 
 
 def test_an_unencoded_pattern_warns_instead_of_silently_passing() -> None:
-    """15 of 16 patterns are not transcribed. Saying nothing would imply approval."""
-    invoice = documented_invoice(inp=5)
+    """جدول ۱ defines 12 patterns; 10 and 12 do not exist in it.
+
+    An invoice naming one must not validate silently — saying nothing would let a
+    clean report read as approval.
+    """
+    invoice = documented_invoice(inp=12)
     report = RuleEngine().validate(invoice)
     warning = next(v for v in report.violations if v.rule == "coverage.pattern_not_encoded")
     assert warning.severity is Severity.WARNING
-    assert "5" in warning.message
+    assert "12" in warning.message
 
 
-def test_partial_coverage_is_declared_on_every_report() -> None:
-    """A clean report on a partial matrix must not read as a full guarantee."""
+def test_every_pattern_in_the_table_is_encoded() -> None:
+    """جدول ۱ has these twelve columns; all must be transcribed."""
+    assert sorted(load_rules().patterns) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14]
+
+
+def test_a_complete_pattern_reports_no_coverage_warning() -> None:
+    """Now that جدول ۱ is fully transcribed, pattern 1 no longer hedges."""
     report = RuleEngine().validate(documented_invoice())
-    assert "coverage.partial" in codes(report)
-    assert report.ok  # warnings do not block
+    assert "coverage.partial" not in codes(report)
+    assert report.ok
 
 
 # ----------------------------------------------------------------- recompute
@@ -426,13 +464,17 @@ def test_violation_str_is_readable() -> None:
 
 def test_the_shipped_spec_loads_and_is_self_consistent() -> None:
     rules = load_rules()
-    assert rules.version == 1
+    assert rules.version == 2
     pattern = rules.pattern(1)
     assert pattern is not None
     assert pattern.name == "فروش"
     for rule in list(pattern.header.values()) + list(pattern.body.values()):
         assert rule.reference, f"{rule.name} cites no clause"
+        if rule.obligation is not Obligation.NOT_APPLICABLE:
+            # Excluded fields never reach a form, so they need no UI label.
+            assert rule.title, f"{rule.name} has no Persian title for the UI"
         if rule.obligation is Obligation.CONDITIONAL:
+            # Either an evaluable condition, or the explicit "we do not know" marker.
             assert rule.when, f"{rule.name} is conditional but has no condition"
 
 
@@ -454,10 +496,65 @@ def test_an_unknown_condition_is_refused_at_load_time(tmp_path) -> None:
         load_rules(spec)
 
 
-def test_the_shipped_spec_declares_its_own_incompleteness() -> None:
-    """Coverage is tracked in the file so nobody has to infer it from the code."""
+def test_the_shipped_spec_is_transcribed_in_full() -> None:
+    """جدول ۱ is now transcribed mechanically, so coverage is complete."""
     pattern = load_rules().pattern(1)
-    assert pattern.coverage == "partial"
-    assert pattern.is_complete is False
-    assert pattern.coverage_note
+    assert pattern.coverage == "complete"
+    assert pattern.is_complete is True
+    assert pattern.types == (1, 2)
     assert SPEC_PATH.is_file()
+
+
+def test_obligations_can_differ_between_invoice_types() -> None:
+    """نوع اول and نوع دوم are separate column bands and genuinely disagree."""
+    pattern = load_rules().pattern(1)
+    assert pattern.header["tob"].for_type(1) is Obligation.REQUIRED
+    assert pattern.header["tob"].for_type(2) is Obligation.OPTIONAL
+    # روش تسویه is not sent at all for نوع دوم — §8-22 rule 2 makes it implicit.
+    assert pattern.header["setm"].for_type(2) is Obligation.NOT_APPLICABLE
+
+
+def test_a_field_outside_the_pattern_is_reported() -> None:
+    """صورتحساب‌های الکترونیکی صرفا شامل اقلام مذکور بوده (RC_IITP §4)."""
+    invoice = documented_invoice(cdcn="12345")  # customs field, صادرات only
+    assert any(
+        v.field == "cdcn" and v.rule == "obligation.not_applicable"
+        for v in RuleEngine().validate(invoice).violations
+    )
+
+
+# ------------------------------------------------------------- verify() for UI
+
+
+def test_verify_renders_persian_titles_and_a_summary() -> None:
+    result = RuleEngine().verify(documented_invoice(tbill=999))
+    assert result.ok is False
+    assert result.pattern == 1
+    assert result.pattern_name == "فروش"
+    assert "خطا" in result.summary
+    tbill = next(e for e in result.errors if e["field"] == "tbill")
+    assert tbill["title"], "the UI needs a Persian label, not a wire name"
+    assert tbill["expected"] is not None and tbill["actual"] == 999
+
+
+def test_verify_says_so_when_the_invoice_is_valid() -> None:
+    result = RuleEngine().verify(documented_invoice())
+    assert result.ok is True
+    assert result.summary.startswith("صورتحساب معتبر است")
+    assert result.errors == ()
+
+
+def test_verify_output_is_json_serialisable() -> None:
+    """It goes straight into an API response, so it must survive json.dumps."""
+    import json
+
+    payload = RuleEngine().verify(documented_invoice(tbill=1)).as_dict()
+    assert json.loads(json.dumps(payload, ensure_ascii=False))["ok"] is False
+
+
+def test_verify_names_the_missing_field_in_persian() -> None:
+    invoice = documented_invoice()
+    invoice.header.tins = None
+    result = RuleEngine().verify(invoice)
+    message = next(e["message"] for e in result.errors if e["field"] == "tins")
+    assert "شماره اقتصادي فروشنده" in message

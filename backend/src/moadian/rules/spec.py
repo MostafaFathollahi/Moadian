@@ -8,7 +8,8 @@ able to answer without running a validation.
 from __future__ import annotations
 
 import functools
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ _CONDITIONS = {
     "ins in (2, 3, 4)": lambda h: h.get("ins") in (2, 3, 4),
 }
 
+#: جدول ۱ marks a field اجباری در شرایط خاص without always naming the trigger, and
+#: the §8 tables only name some of them. Such rules carry this sentinel and are
+#: never enforced: a condition we cannot evaluate must not become a rejection.
+UNSPECIFIED = "unspecified"
+
 
 @dataclass(frozen=True)
 class FieldRule:
@@ -40,6 +46,16 @@ class FieldRule:
     reference: str = ""
     message: str = ""
     when: str | None = None
+    #: Persian title as printed in جدول ۱ — what a UI should label the input.
+    title: str = ""
+    #: Per-نوع overrides: a field can be اجباری for نوع اول and اختیاری for نوع دوم.
+    by_type: Mapping[int, Obligation] = field(default_factory=dict)
+
+    def for_type(self, invoice_type: int | None) -> Obligation:
+        """The obligation in force for this نوع صورتحساب."""
+        if invoice_type is None:
+            return self.obligation
+        return self.by_type.get(int(invoice_type), self.obligation)
 
     def applies(self, header: dict[str, Any]) -> bool:
         """Whether a CONDITIONAL rule's condition currently holds.
@@ -50,14 +66,24 @@ class FieldRule:
         """
         if self.obligation is not Obligation.CONDITIONAL:
             return True
-        if self.when is None:
+        if self.when is None or self.when == UNSPECIFIED:
             return False
         predicate = _CONDITIONS.get(self.when)
         return bool(predicate and predicate(header))
 
     @property
     def default_message(self) -> str:
-        return self.message or f"فیلد {self.name} اجباری است."
+        """A message naming the field the way جدول ۱ does, not by wire name.
+
+        An operator reading "فیلد tins اجباری است" has to know the wire format to
+        act on it; the Persian title is what the form labels the input.
+        """
+        if self.message:
+            return self.message
+        label = self.title or self.name
+        if self.obligation is Obligation.CONDITIONAL:
+            return f"در این حالت، ثبت «{label}» اجباری است."
+        return f"ثبت «{label}» اجباری است."
 
 
 @dataclass(frozen=True)
@@ -69,9 +95,15 @@ class PatternSpec:
     name_en: str
     header: dict[str, FieldRule]
     body: dict[str, FieldRule]
+    payment: dict[str, FieldRule] = field(default_factory=dict)
+    #: انواع صورتحساب this pattern is defined for, per the two header bands.
+    types: tuple[int, ...] = (1,)
     reference: str = ""
     coverage: str = "partial"
     coverage_note: str = ""
+
+    def section(self, name: str) -> dict[str, FieldRule]:
+        return {"header": self.header, "body": self.body, "payment": self.payment}[name]
 
     @property
     def is_complete(self) -> bool:
@@ -120,7 +152,12 @@ class RuleSet:
         return self.patterns.get(number)
 
 
-def _field_rules(raw: dict[str, Any] | None, section: str, pattern: int) -> dict[str, FieldRule]:
+def _field_rules(
+    raw: dict[str, Any] | None,
+    section: str,
+    pattern: int,
+    default_reference: str = "",
+) -> dict[str, FieldRule]:
     rules: dict[str, FieldRule] = {}
     for name, spec in (raw or {}).items():
         try:
@@ -130,7 +167,7 @@ def _field_rules(raw: dict[str, Any] | None, section: str, pattern: int) -> dict
                 f"pattern {pattern}.{section}.{name} has an invalid obligation: {exc}"
             ) from exc
         when = spec.get("when")
-        if obligation is Obligation.CONDITIONAL:
+        if obligation is Obligation.CONDITIONAL and when != UNSPECIFIED:
             if not when:
                 raise ConfigurationError(
                     f"pattern {pattern}.{section}.{name} is conditional but names no 'when'"
@@ -143,9 +180,13 @@ def _field_rules(raw: dict[str, Any] | None, section: str, pattern: int) -> dict
         rules[name] = FieldRule(
             name=name,
             obligation=obligation,
-            reference=spec.get("reference", ""),
+            reference=spec.get("reference") or spec.get("condition_reference") or default_reference,
             message=spec.get("message", ""),
             when=when,
+            title=spec.get("title", ""),
+            by_type={
+                int(t): Obligation(o) for t, o in (spec.get("by_type") or {}).items()
+            },
         )
     return rules
 
@@ -166,12 +207,30 @@ def load_rules(path: Path | None = None) -> RuleSet:
 
     patterns: dict[int, PatternSpec] = {}
     for number, spec in (raw.get("patterns") or {}).items():
+        sections = {
+            name: _field_rules(spec.get(name), name, int(number), spec.get("reference", ""))
+            for name in ("header", "body", "payment")
+        }
+        # `excluded` lists the fields جدول ۱ marks as not belonging to this
+        # pattern. Expanded into real rules here so the engine can report them,
+        # while the file stays readable — 38 of ~102 are excluded for a plain sale.
+        for name, names in (spec.get("excluded") or {}).items():
+            if name not in sections:
+                continue
+            for wire in names:
+                sections[name][wire] = FieldRule(
+                    name=wire,
+                    obligation=Obligation.NOT_APPLICABLE,
+                    reference=spec.get("reference", ""),
+                )
         patterns[int(number)] = PatternSpec(
             number=int(number),
             name=spec.get("name", ""),
             name_en=spec.get("name_en", ""),
-            header=_field_rules(spec.get("header"), "header", int(number)),
-            body=_field_rules(spec.get("body"), "body", int(number)),
+            header=sections["header"],
+            body=sections["body"],
+            payment=sections["payment"],
+            types=tuple(int(t) for t in (spec.get("types") or [1])),
             reference=spec.get("reference", ""),
             coverage=spec.get("coverage", "partial"),
             coverage_note=spec.get("coverage_note", ""),

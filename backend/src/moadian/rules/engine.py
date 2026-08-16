@@ -18,7 +18,13 @@ from typing import Any
 from moadian.models import Invoice
 from moadian.rules.arithmetic import check_arithmetic
 from moadian.rules.spec import RuleSet, load_rules
-from moadian.rules.violations import Obligation, Severity, ValidationReport, Violation
+from moadian.rules.violations import (
+    Obligation,
+    Severity,
+    ValidationReport,
+    VerificationResult,
+    Violation,
+)
 
 __all__ = ["RuleEngine"]
 
@@ -89,23 +95,29 @@ class RuleEngine:
 
     def _check_obligations(self, invoice: Invoice, spec: Any) -> list[Violation]:
         header = invoice.header.model_dump(exclude_none=True, by_alias=True)
+        invoice_type = invoice.header.inty
         violations: list[Violation] = []
 
         for name, rule in spec.header.items():
-            if rule.obligation is Obligation.FORBIDDEN:
+            obligation = rule.for_type(invoice_type)
+            if obligation is Obligation.NOT_APPLICABLE:
                 if name in header:
                     violations.append(
                         Violation(
                             field=name,
-                            rule="obligation.forbidden",
-                            message=f"فیلد {name} در این الگو مجاز نیست.",
+                            rule="obligation.not_applicable",
+                            message=(
+                                f"فیلد «{rule.title or name}» جزو اقلام این الگو نیست و "
+                                "نباید ارسال شود."
+                            ),
                             reference=rule.reference,
+                            context={"title": rule.title},
                         )
                     )
                 continue
-            if rule.obligation is Obligation.OPTIONAL:
+            if obligation is Obligation.OPTIONAL:
                 continue
-            if not rule.applies(header):
+            if obligation is Obligation.CONDITIONAL and not rule.applies(header):
                 continue
             if name not in header:
                 violations.append(
@@ -113,11 +125,12 @@ class RuleEngine:
                         field=name,
                         rule=(
                             "obligation.conditional"
-                            if rule.obligation is Obligation.CONDITIONAL
+                            if obligation is Obligation.CONDITIONAL
                             else "obligation.required"
                         ),
                         message=rule.default_message,
                         reference=rule.reference,
+                        context={"title": rule.title},
                     )
                 )
 
@@ -134,7 +147,7 @@ class RuleEngine:
         for index, item in enumerate(invoice.body):
             present = item.model_dump(exclude_none=True, by_alias=True)
             for name, rule in spec.body.items():
-                if rule.obligation is not Obligation.REQUIRED:
+                if rule.for_type(invoice_type) is not Obligation.REQUIRED:
                     continue
                 if name not in present:
                     violations.append(
@@ -144,6 +157,7 @@ class RuleEngine:
                             rule="obligation.required",
                             message=rule.default_message,
                             reference=rule.reference,
+                            context={"title": rule.title},
                         )
                     )
         return violations
@@ -169,3 +183,22 @@ class RuleEngine:
                     )
                 )
         return violations
+
+    # -- the اعتبارسنجی button --------------------------------------------
+
+    def verify(self, invoice: Invoice) -> VerificationResult:
+        """Validate and render the outcome for a person.
+
+        :meth:`validate` returns typed violations for code; this returns the same
+        findings shaped for an اعتبارسنجی button and for an API response — Persian
+        field titles, a one-line summary, and everything JSON-serialisable.
+        """
+        report = self.validate(invoice)
+        spec = self._rules.pattern(invoice.header.inp or DEFAULT_PATTERN)
+        titles: dict[str, str] = {}
+        if spec is not None:
+            for section in ("header", "body", "payment"):
+                for name, rule in spec.section(section).items():
+                    if rule.title:
+                        titles.setdefault(name, rule.title)
+        return VerificationResult.from_report(report, titles=titles, pattern=spec)

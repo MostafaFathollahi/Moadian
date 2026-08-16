@@ -49,7 +49,7 @@ def generate(out_dir: Path, national_id: str, common_name: str, org: str, days: 
         x509.NameAttribute(NameOID.SERIAL_NUMBER, national_id),
     ])
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)

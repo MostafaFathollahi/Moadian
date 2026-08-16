@@ -19,6 +19,7 @@ from moadian.rules.violations import (
     Obligation,
     Severity,
     ValidationReport,
+    VerificationResult,
     Violation,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "Violation",
     "Severity",
     "Obligation",
+    "VerificationResult",
     "FieldRule",
     "PatternSpec",
     "RuleSet",

@@ -12,7 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-__all__ = ["Severity", "Violation", "Obligation"]
+__all__ = [
+    "Severity",
+    "Violation",
+    "Obligation",
+    "ValidationReport",
+    "VerificationResult",
+]
 
 
 class Severity(StrEnum):
@@ -35,7 +41,7 @@ class Obligation(StrEnum):
     CONDITIONAL = "conditional"
     #: Not part of this pattern at all. Sending it is a structural error:
     #: "صورتحساب‌های الکترونیکی صرفا شامل اقلام مذکور بوده" (RC_IITP §4).
-    FORBIDDEN = "forbidden"
+    NOT_APPLICABLE = "not_applicable"
 
 
 @dataclass(frozen=True)
@@ -100,3 +106,72 @@ class ValidationReport:
         from moadian.errors import InvoiceValidationError
 
         raise InvoiceValidationError(self.errors)
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    """A :class:`ValidationReport` rendered for a person.
+
+    What the اعتبارسنجی button in the invoice form shows, and what the API
+    returns: Persian field titles from جدول ۱, a one-line summary, and nothing
+    that is not JSON-serialisable.
+    """
+
+    ok: bool
+    summary: str
+    errors: tuple[dict[str, object], ...] = ()
+    warnings: tuple[dict[str, object], ...] = ()
+    pattern: int | None = None
+    pattern_name: str = ""
+
+    @staticmethod
+    def _render(violation: Violation, titles: dict[str, str]) -> dict[str, object]:
+        return {
+            "field": violation.field,
+            "title": titles.get(violation.field, "") or violation.context.get("title", ""),
+            "line": violation.line,
+            "rule": violation.rule,
+            "message": violation.message,
+            "reference": violation.reference,
+            "expected": violation.expected,
+            "actual": violation.actual,
+        }
+
+    @classmethod
+    def from_report(
+        cls,
+        report: ValidationReport,
+        *,
+        titles: dict[str, str] | None = None,
+        pattern: object | None = None,
+    ) -> VerificationResult:
+        titles = titles or {}
+        errors = tuple(cls._render(v, titles) for v in report.errors)
+        warnings = tuple(cls._render(v, titles) for v in report.warnings)
+        if not errors:
+            summary = "صورتحساب معتبر است."
+            if warnings:
+                summary += f" ({len(warnings)} هشدار)"
+        elif len(errors) == 1:
+            summary = f"یک خطا یافت شد: {errors[0]['message']}"
+        else:
+            summary = f"{len(errors)} خطا در صورتحساب یافت شد."
+        return cls(
+            ok=not errors,
+            summary=summary,
+            errors=errors,
+            warnings=warnings,
+            pattern=getattr(pattern, "number", None),
+            pattern_name=getattr(pattern, "name", ""),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        """JSON-ready, for an API response."""
+        return {
+            "ok": self.ok,
+            "summary": self.summary,
+            "pattern": self.pattern,
+            "patternName": self.pattern_name,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+        }
