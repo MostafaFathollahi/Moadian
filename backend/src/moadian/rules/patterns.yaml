@@ -1,0 +1,192 @@
+# Pattern × field obligation matrix — RC_IITP_IS_V7_9_1 جدول شماره ۱ and §8.
+#
+# The 16 الگو (patterns) share most of their ~109 fields and differ in which are
+# اجباری / اختیاری / اجباری در شرایط خاص. That is tabular data, so it lives here
+# rather than in code; the money formulas do not, because several have
+# pattern-specific inputs (see rules/arithmetic.py for why).
+#
+# HONESTY NOTE — this file is deliberately incomplete.
+#   Only الگوی اول (pattern 1, فروش) is encoded, and within it only the fields
+#   whose obligation could actually be read out of the PDF. The pattern table on
+#   p.14 is a 16-column rotated-header layout that text extraction mangles badly,
+#   so anything not legible is left `optional` rather than guessed. An obligation
+#   invented here would surface as a confident, wrong rejection in the UI — worse
+#   than no rule at all. `coverage` below records that state; raise it only by
+#   reading the PDF, not by inference.
+#
+# Obligations: required | optional | conditional | forbidden
+#   conditional entries carry `when`, naming the condition in the operator's
+#   terms; the engine reports them only when the condition is evaluable.
+
+version: 1
+
+defaults:
+  # Fields not named for a pattern fall through to this. Optional is the safe
+  # default: a missing rule must not manufacture a rejection.
+  obligation: optional
+
+patterns:
+  1:
+    name: فروش
+    name_en: Sale
+    coverage: partial
+    coverage_note: >-
+      Header identity, totals and the body money columns are evidenced by the
+      per-field tables in §8. The buyer/seller detail columns of جدول ۱ were not
+      legible in extraction and remain optional.
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱، الگوی اول"
+
+    header:
+      taxid:
+        obligation: required
+        reference: "جدول ۱، ردیف ۱"
+        message: شماره منحصر به فرد مالیاتی اجباری است.
+      indatim:
+        obligation: required
+        reference: "جدول ۱، ردیف ۲"
+        message: تاریخ و زمان صدور صورتحساب اجباری است.
+      indati2m:
+        obligation: conditional
+        when: insr == 1
+        reference: "جدول ۱، ردیف ۳؛ §6"
+        message: >-
+          هنگامی که قاعده ارسال صورتحساب برابر یک است، تاریخ و زمان ثبت
+          صورتحساب اجباری است.
+      inty:
+        obligation: required
+        reference: "جدول ۱، ردیف ۴"
+        message: نوع صورتحساب اجباری است.
+      inno:
+        obligation: optional
+        reference: "جدول ۱، ردیف ۵"
+      irtaxid:
+        obligation: conditional
+        when: ins in (2, 3, 4)
+        reference: "جدول ۱، ردیف ۶؛ §5"
+        message: >-
+          در صورتحساب اصلاحی، ابطالی یا برگشت از فروش، شماره منحصر به فرد
+          مالیاتی صورتحساب مرجع اجباری است.
+      inp:
+        obligation: required
+        reference: "جدول ۱، ردیف ۷"
+        message: الگوی صورتحساب اجباری است.
+      ins:
+        obligation: required
+        reference: "جدول ۱، ردیف ۸"
+        message: موضوع صورتحساب اجباری است.
+      tins:
+        obligation: required
+        reference: "جدول ۱، ردیف ۹"
+        message: شماره اقتصادی فروشنده اجباری است.
+      tob:
+        obligation: required
+        reference: "جدول ۱، ردیف ۱۰"
+        message: نوع شخص خریدار اجباری است.
+
+      # Totals. §8-16 and §8-18 name tvam and tbill اجباری outright; the rest are
+      # "با توجه به الگوی صورتحساب تعیین می‌شود" and are required for فروش because
+      # their §8 formulas are unconditional sums over the body.
+      tprdis:
+        obligation: required
+        reference: "§8-13، جدول ۱۵"
+        message: مجموع مبلغ قبل از کسر تخفیف اجباری است.
+      tdis:
+        obligation: optional
+        reference: "§8-14، جدول ۱۶"
+      tadis:
+        obligation: required
+        reference: "§8-15، جدول ۱۷"
+        message: مجموع مبلغ پس از کسر تخفیف اجباری است.
+      tvam:
+        obligation: required
+        reference: "§8-16، جدول ۱۸"
+        message: مجموع مالیات بر ارزش افزوده اجباری است.
+      todam:
+        obligation: optional
+        reference: "§8-17، جدول ۱۹"
+      tbill:
+        obligation: required
+        reference: "§8-18، جدول ۲۰"
+        message: مجموع صورتحساب اجباری است.
+      setm:
+        obligation: required
+        reference: "§8-22، جدول ۲۴"
+        message: روش تسویه اجباری است.
+      cap:
+        obligation: conditional
+        when: setm == 3
+        reference: "§8-23، جدول ۲۵"
+        message: در روش تسویه نقدی/نسیه، مبلغ پرداختی نقدی اجباری است.
+      insp:
+        obligation: conditional
+        when: setm == 3
+        reference: "§8-24، جدول ۲۶"
+        message: در روش تسویه نقدی/نسیه، مبلغ نسیه اجباری است.
+
+    body:
+      sstid:
+        obligation: required
+        reference: "جدول ۱، ردیف ۳۳"
+        message: شناسه کالا/خدمت اجباری است.
+      sstt:
+        obligation: required
+        reference: "جدول ۱، ردیف ۳۴"
+        message: شرح کالا/خدمت اجباری است.
+      mu:
+        obligation: required
+        reference: "جدول ۱، ردیف ۳۵"
+        message: واحد اندازه‌گیری اجباری است.
+      am:
+        obligation: required
+        reference: "جدول ۱، ردیف ۳۶"
+        message: تعداد/مقدار اجباری است.
+      fee:
+        obligation: required
+        reference: "جدول ۱، ردیف ۳۷"
+        message: مبلغ واحد اجباری است.
+      prdis:
+        obligation: required
+        reference: "§8-38، جدول ۴۰"
+        message: مبلغ قبل از تخفیف اجباری است.
+      dis:
+        obligation: optional
+        reference: "§8-39، جدول ۴۱"
+      adis:
+        obligation: required
+        reference: "§8-40، جدول ۴۲"
+        message: مبلغ بعد از تخفیف اجباری است.
+      vra:
+        obligation: required
+        reference: "§8-41، جدول ۴۳"
+        message: نرخ مالیات بر ارزش افزوده اجباری است.
+      vam:
+        obligation: required
+        reference: "§8-42، جدول ۴۴"
+        message: مبلغ مالیات بر ارزش افزوده اجباری است.
+      tsstam:
+        obligation: required
+        reference: "§8-51، جدول ۵۳"
+        message: مبلغ کل کالا/خدمت اجباری است.
+
+# Enumerations the engine range-checks. Values come from the §8 tables, not guesses.
+enums:
+  inty:
+    reference: "§3"
+    values: [1, 2, 3]
+    message: نوع صورتحساب باید یک، دو یا سه باشد.
+  ins:
+    reference: "§5"
+    values: [1, 2, 3, 4]
+    message: موضوع صورتحساب باید اصلی، اصلاحی، ابطالی یا برگشت از فروش باشد.
+  setm:
+    reference: "§8-22، جدول ۲۴، ردیف ۱"
+    values: [1, 2, 3]
+    message: روش تسویه باید نقدی (۱)، نسیه (۲) یا نقدی/نسیه (۳) باشد.
+  tob:
+    reference: "§8-9"
+    values: [1, 2, 3, 4, 5]
+    message: نوع شخص خریدار خارج از مقادیر مجاز است.
+  insr:
+    reference: "§6"
+    values: [1]
+    message: قاعده ارسال صورتحساب تنها می‌تواند برابر یک باشد.

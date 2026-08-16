@@ -27,6 +27,7 @@ from moadian.client.api import MAX_PACKETS
 from moadian.crypto import JweEncryptor, ServerKey, Signatory
 from moadian.errors import ConfigurationError, UnknownResponseError
 from moadian.models import InquiryResult, Invoice, Packet, RequestStatus, SubmitResult
+from moadian.rules import RuleEngine
 from moadian.taxid import MAX_SERIAL, generate_tax_id, invoice_serial_hex
 
 try:  # POSIX only; Windows has no flock and falls back to the in-process lock.
@@ -168,11 +169,19 @@ class InvoicePipeline:
         signatory: Signatory,
         memory_id: str,
         serial_source: Callable[[], int],
+        rules: RuleEngine | None = None,
+        validate: bool = True,
     ) -> None:
         self._client = client
         self._signatory = signatory
         self._memory_id = memory_id
         self._serial_source = serial_source
+        # Validation runs before a serial is drawn, because a serial spent on an
+        # invoice the organization will refuse cannot be reused. Pass
+        # validate=False only to submit something deliberately malformed — which
+        # is a thing the mock tests need and production never does.
+        self._validate = validate
+        self._rules = rules or RuleEngine()
         self._server_key: ServerKey | None = None
         # submit() may be awaited concurrently; without this, two callers each
         # fetch a key and burn a nonce for the one that loses.
@@ -313,6 +322,10 @@ class InvoicePipeline:
         packets: list[Packet] = []
         identities: list[tuple[str, str]] = []
         for invoice in invoices:
+            # Before _with_identity, deliberately: that call draws a serial, and
+            # a serial is only monotonic if it is never wasted.
+            if self._validate:
+                self._rules.validate(invoice).raise_if_invalid()
             complete = self._with_identity(invoice)
             uid = str(uuid4())
             packets.append(

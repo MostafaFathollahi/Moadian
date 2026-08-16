@@ -141,6 +141,7 @@ def sample_invoice() -> Invoice:
             inno=invoice_serial_hex(serial),
             setm=2,  # نقد
             tins=NATIONAL_ID,
+            tob=2,
             tinb=BUYER_NATIONAL_ID,
             tprdis=20000,
             tdis=500,

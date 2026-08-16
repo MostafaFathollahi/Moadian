@@ -128,6 +128,7 @@ def make_invoice(*, taxid: str = "", inno: str | None = None) -> Invoice:
             inno=inno,
             setm=2,
             tins=NATIONAL_ID,
+            tob=2,
             tinb=BUYER_NATIONAL_ID,
             tprdis=20000,
             tdis=500,
@@ -637,3 +638,49 @@ async def test_a_rejected_chunk_propagates_instead_of_reporting_success(
     assert calls == [1, 1], "the third chunk was built after the second had failed"
     assert counter.current == 2, "serials were spent on a chunk that never went out"
     assert len(state.submissions) == 1
+
+
+# ------------------------------------------------- validation gates the serial
+
+
+async def test_an_invalid_invoice_is_refused_before_a_serial_is_spent(
+    pipeline: InvoicePipeline, counter: MonotonicSerialCounter, state: MockState
+) -> None:
+    """The whole reason validation runs in the pipeline rather than after it.
+
+    The organization validates asynchronously, so a bad invoice is only refused
+    after a tax id has been minted from a serial — and a monotonic serial spent
+    on a rejected invoice can never be reused.
+    """
+    from moadian.errors import InvoiceValidationError
+
+    before = counter.current
+    broken = make_invoice()
+    broken.header.tbill = 999_999  # disagrees with the body
+
+    with pytest.raises(InvoiceValidationError) as caught:
+        await pipeline.submit([broken])
+
+    assert "tbill" in caught.value.fields
+    assert counter.current == before, "a serial was spent on an invoice that never went out"
+    assert state.submissions == {}, "an invalid invoice reached the server"
+
+
+async def test_a_valid_invoice_still_passes_the_gate(
+    pipeline: InvoicePipeline, state: MockState
+) -> None:
+    """Guards the guard: the gate must not reject the ordinary case."""
+    submissions = await pipeline.submit([make_invoice()])
+    assert len(submissions) == 1
+    assert len(state.submissions) == 1
+
+
+async def test_validation_can_be_disabled_for_negative_testing(
+    client: MoadianClient, dev_signatory: Pkcs8Signatory, counter: MonotonicSerialCounter
+) -> None:
+    """validate=False exists so the mock can be fed deliberately malformed input."""
+    unchecked = InvoicePipeline(client, dev_signatory, MEMORY_ID, counter, validate=False)
+    broken = make_invoice()
+    broken.header.tbill = 12
+    submissions = await unchecked.submit([broken])
+    assert len(submissions) == 1

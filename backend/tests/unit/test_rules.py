@@ -1,0 +1,463 @@
+"""The RC_IITP rules engine.
+
+The anchor test is :func:`test_the_documented_example_validates_cleanly`: the
+invoice printed in RC_TICS p.20 is one the organization itself published as
+well-formed, so an engine that rejects it is wrong regardless of how defensible
+its rule looks. Everything else is built around not breaking that.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from moadian.errors import ConfigurationError, InvoiceValidationError
+from moadian.models import Invoice, InvoiceBodyItem, InvoiceHeader
+from moadian.rules import (
+    Obligation,
+    RuleEngine,
+    Severity,
+    check_arithmetic,
+    load_rules,
+    recompute,
+)
+from moadian.rules.spec import SPEC_PATH
+
+
+@pytest.fixture(scope="module")
+def engine() -> RuleEngine:
+    return RuleEngine()
+
+
+def documented_invoice(**header_overrides) -> Invoice:
+    """The worked example from RC_TICS p.20, a genuine الگوی اول invoice."""
+    header = {
+        "taxid": "A1121604C220002F095011",
+        "inno": "49321217",
+        "indatim": 1683997837988,
+        "inty": 1,
+        "inp": 1,
+        "ins": 1,
+        "tins": "14003778990",
+        "tob": 2,
+        "bid": "10100302746",
+        "tinb": "10100302746",
+        "tprdis": 20000,
+        "tdis": 500,
+        "tadis": 19500,
+        "tvam": 1755,
+        "todam": 0,
+        "tbill": 21255,
+        "setm": 2,
+    }
+    header.update(header_overrides)
+    return Invoice(
+        header=InvoiceHeader(**header),
+        body=[
+            InvoiceBodyItem(
+                sstid="2710000138624",
+                sstt="سرسیلندر قطعات صنعت فولاد سازی",
+                mu="164",
+                am=2,
+                fee=10000,
+                prdis=20000,
+                dis=500,
+                adis=19500,
+                vra=9,
+                vam=1755,
+                tsstam=21255,
+            )
+        ],
+    )
+
+
+def codes(report) -> set[str]:
+    return {v.rule for v in report.violations}
+
+
+# ----------------------------------------------------------------- the anchor
+
+
+def test_the_documented_example_validates_cleanly(engine: RuleEngine) -> None:
+    """RC_TICS p.20's own invoice must pass. If it does not, a rule is wrong."""
+    report = engine.validate(documented_invoice())
+    assert report.errors == (), [str(v) for v in report.errors]
+    assert report.ok
+    assert bool(report) is True
+
+
+def test_the_documented_example_is_internally_consistent() -> None:
+    """Sanity-check the fixture against the §8 formulas, independently of the engine.
+
+    20000 - 500 = 19500; 19500 * 9% = 1755; 19500 + 1755 = 21255.
+    """
+    invoice = documented_invoice()
+    item = invoice.body[0]
+    assert item.prdis == item.am * item.fee
+    assert item.adis == item.prdis - item.dis
+    assert item.vam == pytest.approx(item.adis * item.vra / 100)
+    assert item.tsstam == item.adis + item.vam
+    assert invoice.header.tbill == item.tsstam
+
+
+# ------------------------------------------------------------ line arithmetic
+
+
+@pytest.mark.parametrize(
+    "field,value,expected_rule",
+    [
+        ("prdis", 19000, "arithmetic.prdis"),  # != am * fee
+        ("adis", 19000, "arithmetic.adis"),  # != prdis - dis
+        ("vam", 1700, "arithmetic.vam"),  # != adis * vra / 100
+        ("tsstam", 21000, "arithmetic.tsstam"),  # != adis + vam + odam + olam
+    ],
+)
+def test_a_wrong_line_figure_is_caught(field: str, value: int, expected_rule: str) -> None:
+    invoice = documented_invoice()
+    setattr(invoice.body[0], field, value)
+    report = RuleEngine().validate(invoice)
+    assert expected_rule in codes(report)
+    broken = next(v for v in report.violations if v.rule == expected_rule)
+    assert broken.line == 0
+    assert broken.actual == value
+    assert broken.expected is not None
+    assert broken.reference  # every violation cites the clause it came from
+
+
+def test_discount_cannot_exceed_the_pre_discount_amount() -> None:
+    invoice = documented_invoice()
+    invoice.body[0].dis = 25_000  # more than prdis of 20000
+    assert "arithmetic.dis.at_most_prdis" in codes(RuleEngine().validate(invoice))
+
+
+def test_a_negative_discount_is_caught() -> None:
+    invoice = documented_invoice()
+    invoice.body[0].dis = -1
+    assert "arithmetic.dis.non_negative" in codes(RuleEngine().validate(invoice))
+
+
+def test_pre_discount_must_be_positive() -> None:
+    invoice = documented_invoice(tprdis=0, tadis=0, tvam=0, tbill=0)
+    invoice.body[0].am = 0
+    invoice.body[0].prdis = 0
+    invoice.body[0].adis = 0
+    invoice.body[0].vam = 0
+    invoice.body[0].tsstam = 0
+    invoice.body[0].dis = 0
+    report = RuleEngine().validate(invoice)
+    assert "arithmetic.prdis.positive" in codes(report)
+    assert "arithmetic.tprdis.positive" in codes(report)
+
+
+# ----------------------------------------------------------- header totals
+
+
+@pytest.mark.parametrize(
+    "field,value,expected_rule",
+    [
+        ("tprdis", 30_000, "arithmetic.tprdis"),
+        ("tdis", 900, "arithmetic.tdis"),
+        ("tadis", 19_000, "arithmetic.tadis"),
+        ("tvam", 1_765, "arithmetic.tvam"),
+        ("todam", 1_000, "arithmetic.todam"),
+        ("tbill", 21_000, "arithmetic.tbill"),
+    ],
+)
+def test_a_total_that_disagrees_with_the_body_is_caught(
+    field: str, value: int, expected_rule: str
+) -> None:
+    invoice = documented_invoice(**{field: value})
+    assert expected_rule in codes(RuleEngine().validate(invoice))
+
+
+def test_totals_sum_across_several_lines() -> None:
+    """Two identical lines: every header total must double."""
+    invoice = documented_invoice(
+        tprdis=40_000, tdis=1_000, tadis=39_000, tvam=3_510, tbill=42_510
+    )
+    invoice.body.append(invoice.body[0].model_copy(deep=True))
+    report = RuleEngine().validate(invoice)
+    assert report.errors == (), [str(v) for v in report.errors]
+
+
+def test_the_sdk_guides_deliberately_invalid_invoice_is_rejected() -> None:
+    """The SDK guide ships a 'CreateInvalidInvoice' example. It must not pass.
+
+    Its totals contradict its single line: tprdis 30000 against a 20000 line,
+    a vam of 0 at a 10% rate, and a tbill that matches neither.
+    """
+    invoice = documented_invoice(
+        inp=7, tprdis=30_000, tdis=500, tadis=19_500, tvam=1_765, todam=1_000, tbill=21_255, setm=3
+    )
+    invoice.body[0] = InvoiceBodyItem(
+        sstid="1710000138624",
+        sstt="کالای اشتباه",
+        mu="164",
+        am=2,
+        fee=10_000,
+        prdis=20_000,
+        dis=0,
+        adis=19_500,
+        vra=10,
+        vam=0,
+        tsstam=20_000,
+    )
+    report = RuleEngine().validate(invoice)
+    assert not report.ok
+    # adis != prdis - dis, vam != adis*vra/100, and the header totals disagree.
+    assert {"arithmetic.adis", "arithmetic.vam", "arithmetic.tprdis"} <= codes(report)
+
+
+# --------------------------------------------------------------- obligations
+
+
+@pytest.mark.parametrize("missing", ["taxid", "indatim", "ins", "tins", "tob", "setm"])
+def test_a_missing_required_header_field_is_reported(missing: str) -> None:
+    invoice = documented_invoice()
+    setattr(invoice.header, missing, None)
+    report = RuleEngine().validate(invoice)
+    assert any(
+        v.field == missing and v.rule == "obligation.required" for v in report.violations
+    ), f"{missing} was not reported as required"
+
+
+@pytest.mark.parametrize("missing", ["sstid", "sstt", "mu", "vra"])
+def test_a_missing_required_body_field_is_reported(missing: str) -> None:
+    invoice = documented_invoice()
+    setattr(invoice.body[0], missing, None)
+    report = RuleEngine().validate(invoice)
+    assert any(v.field == missing and v.line == 0 for v in report.violations)
+
+
+def test_an_optional_field_may_be_absent() -> None:
+    """tdis is اختیاری — dropping it must not produce an obligation error."""
+    invoice = documented_invoice()
+    invoice.header.tdis = None
+    invoice.body[0].dis = None
+    invoice.header.tadis = 20_000
+    invoice.body[0].adis = 20_000
+    invoice.body[0].vam = 1_800
+    invoice.body[0].tsstam = 21_800
+    invoice.header.tvam = 1_800
+    invoice.header.tbill = 21_800
+    report = RuleEngine().validate(invoice)
+    assert not any(v.rule.startswith("obligation") for v in report.violations)
+
+
+def test_an_empty_body_is_rejected() -> None:
+    invoice = documented_invoice()
+    invoice.body = []
+    assert "obligation.body_not_empty" in codes(RuleEngine().validate(invoice))
+
+
+# --------------------------------------------------------------- conditionals
+
+
+def test_reference_taxid_is_required_only_for_a_referring_invoice() -> None:
+    """irtaxid is اجباری در شرایط خاص — only when ins is 2, 3 or 4."""
+    main = documented_invoice(ins=1)
+    assert not any(v.field == "irtaxid" for v in RuleEngine().validate(main).violations)
+
+    corrective = documented_invoice(ins=2)  # اصلاحی
+    assert any(
+        v.field == "irtaxid" and v.rule == "obligation.conditional"
+        for v in RuleEngine().validate(corrective).violations
+    )
+
+    supplied = documented_invoice(ins=2, irtaxid="A1121604C220002F095011")
+    assert not any(v.field == "irtaxid" for v in RuleEngine().validate(supplied).violations)
+
+
+def test_the_cash_credit_split_is_required_only_for_setm_3() -> None:
+    assert not any(
+        v.field in {"cap", "insp"} for v in RuleEngine().validate(documented_invoice()).violations
+    )
+
+    split = documented_invoice(setm=3)
+    reported = {v.field for v in RuleEngine().validate(split).violations}
+    assert {"cap", "insp"} <= reported
+
+
+def test_a_balanced_cash_credit_split_passes() -> None:
+    """C = Xs - W2 - W - Cr, so cash + credit + VAT = the bill."""
+    invoice = documented_invoice(setm=3, cap=9_500, insp=10_000)
+    report = RuleEngine().validate(invoice)
+    assert not any(v.rule.startswith("settlement") for v in report.violations), [
+        str(v) for v in report.violations
+    ]
+
+
+def test_an_unbalanced_split_is_caught() -> None:
+    invoice = documented_invoice(setm=3, cap=5_000, insp=10_000)
+    assert "settlement.split_balances" in codes(RuleEngine().validate(invoice))
+
+
+def test_indati2m_is_required_when_the_article_9_rule_is_used() -> None:
+    """insr == 1 invokes ماده ۹, which makes the registration timestamp mandatory."""
+    invoice = documented_invoice(insr=1)
+    assert any(
+        v.field == "indati2m" and v.rule == "obligation.conditional"
+        for v in RuleEngine().validate(invoice).violations
+    )
+
+
+# ------------------------------------------------------------------- enums
+
+
+@pytest.mark.parametrize(
+    "field,bad", [("inty", 9), ("ins", 7), ("setm", 4), ("tob", 99), ("insr", 2)]
+)
+def test_an_out_of_range_enum_is_caught(field: str, bad: int) -> None:
+    invoice = documented_invoice(**{field: bad})
+    report = RuleEngine().validate(invoice)
+    assert any(v.field == field and v.rule == "enum.out_of_range" for v in report.violations)
+
+
+# ------------------------------------------------------ pattern-specific paths
+
+
+def test_export_pattern_requires_a_zero_vat_rate() -> None:
+    """§8-41 rule 5 fixes نرخ to zero for صادرات, بورس and فروش زنجیره‌ای."""
+    invoice = documented_invoice(inp=7)
+    report = RuleEngine().validate(invoice)
+    assert "arithmetic.vra.zero_for_pattern" in codes(report)
+
+
+def test_an_unencoded_pattern_warns_instead_of_silently_passing() -> None:
+    """15 of 16 patterns are not transcribed. Saying nothing would imply approval."""
+    invoice = documented_invoice(inp=5)
+    report = RuleEngine().validate(invoice)
+    warning = next(v for v in report.violations if v.rule == "coverage.pattern_not_encoded")
+    assert warning.severity is Severity.WARNING
+    assert "5" in warning.message
+
+
+def test_partial_coverage_is_declared_on_every_report() -> None:
+    """A clean report on a partial matrix must not read as a full guarantee."""
+    report = RuleEngine().validate(documented_invoice())
+    assert "coverage.partial" in codes(report)
+    assert report.ok  # warnings do not block
+
+
+# ----------------------------------------------------------------- recompute
+
+
+def test_recompute_derives_every_money_field_from_its_inputs() -> None:
+    """The entry form's 'calculate': give quantity, price, discount and rate."""
+    skeleton = Invoice(
+        header=InvoiceHeader(taxid="A" * 22, indatim=1683997837988, ins=1, inp=1, inty=1, setm=2),
+        body=[InvoiceBodyItem(sstid="2710000138624", am=2, fee=10_000, dis=500, vra=9)],
+    )
+    filled = recompute(skeleton)
+
+    item = filled.body[0]
+    assert (item.prdis, item.adis, item.vam, item.tsstam) == (20_000, 19_500, 1_755, 21_255)
+    header = filled.header
+    assert (header.tprdis, header.tdis, header.tadis) == (20_000, 500, 19_500)
+    assert (header.tvam, header.todam, header.tbill) == (1_755, 0, 21_255)
+
+    assert check_arithmetic(filled, 1) == []
+
+
+def test_recompute_does_not_mutate_its_input() -> None:
+    original = Invoice(
+        header=InvoiceHeader(taxid="A" * 22, indatim=1, ins=1, inp=1),
+        body=[InvoiceBodyItem(sstid="X", am=1, fee=100, vra=10)],
+    )
+    recompute(original)
+    assert original.body[0].prdis is None
+    assert original.header.tbill is None
+
+
+def test_recompute_output_survives_its_own_validation() -> None:
+    """Whatever recompute produces must satisfy the engine — else they disagree."""
+    skeleton = Invoice(
+        header=InvoiceHeader(
+            taxid="A" * 22, indatim=1683997837988, ins=1, inp=1, inty=1,
+            tins="14003778990", tob=2, setm=2,
+        ),
+        body=[
+            InvoiceBodyItem(sstid="1", sstt="الف", mu="164", am=3, fee=7_000, dis=1_000, vra=9),
+            InvoiceBodyItem(sstid="2", sstt="ب", mu="164", am=1, fee=250_000, dis=0, vra=10),
+        ],
+    )
+    report = RuleEngine().validate(recompute(skeleton))
+    assert report.errors == (), [str(v) for v in report.errors]
+
+
+# ----------------------------------------------------------------- reporting
+
+
+def test_every_violation_cites_a_clause() -> None:
+    """A finding that cannot say which rule it broke is barely better than a boolean."""
+    invoice = documented_invoice(tbill=1, tvam=2, setm=4)
+    invoice.body[0].vam = 3
+    report = RuleEngine().validate(invoice)
+    assert report.violations
+    for violation in report.violations:
+        assert violation.reference, f"{violation.rule} cites nothing"
+        assert violation.message
+
+
+def test_raise_if_invalid_raises_only_on_errors() -> None:
+    RuleEngine().validate(documented_invoice()).raise_if_invalid()  # warnings only
+
+    bad = RuleEngine().validate(documented_invoice(tbill=1))
+    with pytest.raises(InvoiceValidationError) as caught:
+        bad.raise_if_invalid()
+    assert "tbill" in caught.value.fields
+    assert caught.value.violations
+
+
+def test_all_violations_are_reported_not_just_the_first() -> None:
+    """An operator fixing an invoice wants the whole list, not one per round trip."""
+    invoice = documented_invoice(tprdis=1, tadis=2, tvam=3, tbill=4)
+    report = RuleEngine().validate(invoice)
+    assert len(report.errors) >= 4
+
+
+def test_violation_str_is_readable() -> None:
+    report = RuleEngine().validate(documented_invoice(tbill=999))
+    rendered = str(next(v for v in report.errors if v.field == "tbill"))
+    assert "tbill" in rendered and "§8-18" in rendered
+
+
+# --------------------------------------------------------------- the spec file
+
+
+def test_the_shipped_spec_loads_and_is_self_consistent() -> None:
+    rules = load_rules()
+    assert rules.version == 1
+    pattern = rules.pattern(1)
+    assert pattern is not None
+    assert pattern.name == "فروش"
+    for rule in list(pattern.header.values()) + list(pattern.body.values()):
+        assert rule.reference, f"{rule.name} cites no clause"
+        if rule.obligation is Obligation.CONDITIONAL:
+            assert rule.when, f"{rule.name} is conditional but has no condition"
+
+
+def test_an_unknown_condition_is_refused_at_load_time(tmp_path) -> None:
+    """A typo in `when` must fail loudly, not silently disable the rule."""
+    spec = tmp_path / "patterns.yaml"
+    spec.write_text(
+        "version: 1\n"
+        "patterns:\n"
+        "  1:\n"
+        "    name: فروش\n"
+        "    header:\n"
+        "      cap:\n"
+        "        obligation: conditional\n"
+        "        when: setm == 42\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigurationError, match="unknown condition"):
+        load_rules(spec)
+
+
+def test_the_shipped_spec_declares_its_own_incompleteness() -> None:
+    """Coverage is tracked in the file so nobody has to infer it from the code."""
+    pattern = load_rules().pattern(1)
+    assert pattern.coverage == "partial"
+    assert pattern.is_complete is False
+    assert pattern.coverage_note
+    assert SPEC_PATH.is_file()

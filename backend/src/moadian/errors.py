@@ -11,6 +11,7 @@ __all__ = [
     "CryptographyError",
     "CertificateError",
     "InvalidTaxIdError",
+    "InvoiceValidationError",
     "ConfigurationError",
     "TransportError",
     "TaxApiError",
@@ -35,6 +36,26 @@ class CertificateError(CryptographyError):
 
 class InvalidTaxIdError(MoadianError):
     """A شماره منحصر به فرد مالیاتی is malformed or fails its check digit."""
+
+
+class InvoiceValidationError(MoadianError):
+    """An invoice broke RC_IITP rules and was not sent.
+
+    Raised before signing, deliberately: the organization validates
+    asynchronously, and by the time it refuses an invoice a tax id and a serial
+    have already been spent on it and cannot be reused.
+    """
+
+    def __init__(self, violations) -> None:  # noqa: ANN001 - avoids a circular import
+        self.violations = tuple(violations)
+        joined = "؛ ".join(str(v) for v in self.violations[:5])
+        more = f" (و {len(self.violations) - 5} مورد دیگر)" if len(self.violations) > 5 else ""
+        super().__init__(f"صورتحساب معتبر نیست: {joined}{more}")
+
+    @property
+    def fields(self) -> list[str]:
+        """The wire fields at fault, for a UI that highlights inputs."""
+        return [v.field for v in self.violations]
 
 
 class ConfigurationError(MoadianError):

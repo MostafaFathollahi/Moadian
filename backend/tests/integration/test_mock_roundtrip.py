@@ -125,6 +125,7 @@ def _invoice(serial: int = 1) -> Invoice:
             ins=1,
             inno=invoice_serial_hex(serial),
             tins=NATIONAL_ID,
+            tob=2,
             tinb="10100302746",
             tprdis=20000,
             tdis=500,

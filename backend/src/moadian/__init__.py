@@ -34,6 +34,7 @@ from moadian.errors import (
     ConfigurationError,
     CryptographyError,
     InvalidTaxIdError,
+    InvoiceValidationError,
     MoadianError,
     TaxApiError,
     TransportError,
@@ -59,6 +60,14 @@ from moadian.models import (
     SubmitResult,
 )
 from moadian.pipeline import InvoicePipeline, InvoiceSubmission, MonotonicSerialCounter
+from moadian.rules import (
+    Obligation,
+    RuleEngine,
+    Severity,
+    ValidationReport,
+    Violation,
+    recompute,
+)
 from moadian.taxid import TEHRAN, generate_tax_id, invoice_serial_hex
 
 __version__ = "0.1.0"
@@ -99,6 +108,13 @@ __all__ = [
     "InvoiceStatus",
     "PaymentMethod",
     "RequestStatus",
+    # validation
+    "RuleEngine",
+    "ValidationReport",
+    "Violation",
+    "Severity",
+    "Obligation",
+    "recompute",
     # tax id
     "TEHRAN",
     "generate_tax_id",
@@ -114,6 +130,7 @@ __all__ = [
     "ConfigurationError",
     "CryptographyError",
     "InvalidTaxIdError",
+    "InvoiceValidationError",
     "TaxApiError",
     "TransportError",
     "UnknownResponseError",
