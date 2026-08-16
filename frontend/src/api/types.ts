@@ -6,6 +6,16 @@
  * service with no clue why. They stay ugly on purpose.
  */
 
+export interface UserInfo {
+  id: number
+  username: string
+  display_name: string
+  role: 'user' | 'admin'
+  is_active: boolean
+  created_at?: string | null
+  disabled_at?: string | null
+}
+
 export type Obligation = 'required' | 'optional' | 'conditional' | 'not_applicable'
 
 export interface EnvironmentInfo {

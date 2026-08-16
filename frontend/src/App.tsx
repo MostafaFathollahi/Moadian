@@ -1,26 +1,50 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from './api/client'
-import type { ProfileView } from './api/types'
+import type { ProfileView, UserInfo } from './api/types'
 import { Banner } from './components/common'
+import { clearSession, getUser, onSessionChange } from './lib/session'
 import { AdminPanel } from './features/admin/AdminPanel'
+import { ChangePassword } from './features/auth/ChangePassword'
+import { LoginPage } from './features/auth/LoginPage'
+import { HelpPanel } from './features/help/HelpPanel'
 import { BuyersPage } from './features/buyers/BuyersPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { GoodsPage } from './features/goods/GoodsPage'
 import { InvoiceEntry } from './features/invoice/InvoiceEntry'
 import { SubmissionsPage } from './features/submissions/SubmissionsPage'
 
-type Route = 'dashboard' | 'invoice' | 'submissions' | 'buyers' | 'goods' | 'admin'
+type Route =
+  | 'dashboard'
+  | 'invoice'
+  | 'submissions'
+  | 'buyers'
+  | 'goods'
+  | 'admin'
+  | 'help'
+  | 'password'
 
-const NAV: { id: Route; label: string }[] = [
+const NAV: { id: Route; label: string; adminOnly?: boolean }[] = [
   { id: 'dashboard', label: 'داشبورد' },
   { id: 'invoice', label: 'صدور صورتحساب' },
   { id: 'submissions', label: 'پیگیری ارسال‌ها' },
   { id: 'buyers', label: 'خریداران' },
   { id: 'goods', label: 'کالا و خدمات' },
-  { id: 'admin', label: 'تنظیمات' },
+  { id: 'admin', label: 'تنظیمات', adminOnly: true },
+  { id: 'help', label: 'راهنما' },
 ]
 
 export function App() {
+  const [user, setUser] = useState<UserInfo | null>(getUser)
+
+  // A 401 anywhere clears the session; this turns that into a redirect to the
+  // login screen rather than a blank page with an error on it.
+  useEffect(() => onSessionChange(setUser), [])
+
+  if (!user) return <LoginPage />
+  return <Shell user={user} onSignOut={clearSession} />
+}
+
+function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
   const [route, setRoute] = useState<Route>('dashboard')
   const [profiles, setProfiles] = useState<ProfileView[]>([])
   const [active, setActive] = useState<string | null>(null)
@@ -67,7 +91,7 @@ export function App() {
           disabled={loading}
         />
 
-        {NAV.map((item) => (
+        {NAV.filter((item) => !item.adminOnly || user.role === 'admin').map((item) => (
           <button
             key={item.id}
             className="nav-item"
@@ -77,6 +101,16 @@ export function App() {
             {item.label}
           </button>
         ))}
+
+        <div className="sidebar-foot">
+          <button className="nav-item" onClick={() => setRoute('password')}>
+            <span>{user.display_name || user.username}</span>
+            <span className="badge">{user.role === 'admin' ? 'مدیر' : 'کاربر'}</span>
+          </button>
+          <button className="nav-item" onClick={onSignOut}>
+            خروج
+          </button>
+        </div>
       </aside>
 
       <main className="main">
@@ -97,8 +131,12 @@ export function App() {
           </Banner>
         )}
 
-        {route === 'admin' ? (
-          <AdminPanel profiles={profiles} onChanged={reloadProfiles} />
+        {route === 'help' ? (
+          <HelpPanel isAdmin={user.role === 'admin'} />
+        ) : route === 'password' ? (
+          <ChangePassword user={user} />
+        ) : route === 'admin' ? (
+          <AdminPanel profiles={profiles} onChanged={reloadProfiles} me={user} />
         ) : !profile ? (
           !loading && <Banner kind="warn">برای ادامه، یک حافظه مالیاتی انتخاب کنید.</Banner>
         ) : route === 'dashboard' ? (

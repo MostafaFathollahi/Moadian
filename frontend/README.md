@@ -32,7 +32,24 @@ npm run dev        # http://localhost:5173
 | پیگیری ارسال‌ها | Sent ≠ confirmed — status per submission with the error detail |
 | خریداران | Reusable buyers, scoped to one fiscal memory |
 | کالا و خدمات | شناسه کالا/خدمت catalogue, one entry may be the form default |
-| تنظیمات | Fiscal memories, signing-material status, connection test |
+| تنظیمات | Fiscal memories, signing-material status, connection test, users |
+| راهنما | The user and admin guides, rendered from docs/*.md |
+
+## Authentication
+
+Login is required; the token lives in `localStorage` and rides on every request.
+A 401 anywhere clears the session, which is what routes the app back to the login
+screen instead of leaving a blank page with an error on it.
+
+Two roles. **تنظیمات** is admin-only and hidden from the sidebar otherwise —
+though the backend enforces it regardless, since a hidden button is not a
+permission. Admins get a users tab: create accounts, change roles, deactivate,
+and sign one user or everyone out. Revoking all sessions hands the caller a fresh
+token so an admin cannot lock themselves out doing it.
+
+> The token in `localStorage` is a deliberate MVP trade-off: an XSS bug can read
+> it, where an httpOnly cookie could not. Acceptable while this is single-operator
+> on localhost or behind an authenticated proxy; revisit before exposing it wider.
 
 ## Things that are deliberate
 
@@ -60,5 +77,12 @@ refuses rather than letting the tax service reject it ten seconds later.
 it goes wrong. Persian labels come from the API, which reads them from جدول ۱.
 
 **No key material, ever.** Nothing here uploads or displays a certificate or a
-private key. The admin screen shows only *status* — which path the server has
-configured, whether the file exists, and its permissions.
+private key. There is no field for one, no picker, and no path input — the admin
+screen shows only *status*: which path the server has configured, whether the
+file exists, and its permissions.
+
+**The guides are imported, not retyped.** `HelpPanel` reads `docs/USER_GUIDE.md`
+and `docs/ADMIN_GUIDE.md` with Vite's `?raw`, rendered by a ~150-line Markdown
+subset in `lib/markdown.tsx`. Not a dependency: the guides are ours and written
+in a known subset, and nothing is ever set as `innerHTML`, so there is no
+sanitiser to get wrong either.

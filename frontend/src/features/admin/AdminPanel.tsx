@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import type { EnvironmentInfo, ProfileView, SigningMaterial } from '../../api/types'
+import type { EnvironmentInfo, ProfileView, SigningMaterial, UserInfo } from '../../api/types'
 import { Banner, Card, Empty, Field } from '../../components/common'
+import { UsersPanel } from './UsersPanel'
 
 export function AdminPanel({
-  profiles, onChanged,
+  profiles, onChanged, me,
 }: {
   profiles: ProfileView[]
   onChanged: () => void
+  me: UserInfo
 }) {
+  const [tab, setTab] = useState<'system' | 'users'>('system')
   const [material, setMaterial] = useState<SigningMaterial[] | null>(null)
   const [environments, setEnvironments] = useState<EnvironmentInfo[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -69,10 +72,22 @@ export function AdminPanel({
       <div className="page-head">
         <div>
           <h1>تنظیمات</h1>
-          <p>حافظه‌های مالیاتی، گواهی امضا و وضعیت اتصال</p>
+          <p>حافظه‌های مالیاتی، گواهی امضا، اتصال و کاربران</p>
+        </div>
+        <div className="btn-row">
+          <button className={`btn${tab === 'system' ? ' primary' : ''}`} onClick={() => setTab('system')}>
+            سامانه
+          </button>
+          <button className={`btn${tab === 'users' ? ' primary' : ''}`} onClick={() => setTab('users')}>
+            کاربران
+          </button>
         </div>
       </div>
 
+      {tab === 'users' && <UsersPanel me={me} />}
+
+      {tab === 'system' && (
+        <>
       {error && <Banner kind="err">{error}</Banner>}
       {notice && <Banner kind="ok">{notice}</Banner>}
 
@@ -224,6 +239,8 @@ export function AdminPanel({
           </div>
         )}
       </Card>
+        </>
+      )}
     </>
   )
 }

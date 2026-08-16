@@ -6,6 +6,7 @@
  * two vocabularies for the same failure.
  */
 
+import { clearSession, getToken } from '../lib/session'
 import type {
   Buyer,
   Dashboard,
@@ -18,6 +19,7 @@ import type {
   ProfileView,
   SigningMaterial,
   SubmitResult,
+  UserInfo,
   VerifyResult,
 } from './types'
 
@@ -53,14 +55,26 @@ function describe(status: number, body: unknown): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   let response: Response
   try {
     response = await fetch(path, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     })
   } catch (cause) {
     throw new ApiError('ارتباط با سرور برقرار نشد.', 0, cause)
+  }
+
+  // A 401 means the session is gone — deactivated, password changed, or an
+  // admin signed everyone out. Clearing here is what routes the app back to
+  // the login screen instead of showing an empty page with an error on it.
+  if (response.status === 401 && !path.startsWith('/api/auth/login')) {
+    clearSession()
   }
 
   if (response.status === 204) return undefined as T
@@ -74,6 +88,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const encode = encodeURIComponent
 
 export const api = {
+  login: (username: string, password: string) =>
+    request<{ token: string; user: UserInfo }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  me: () => request<UserInfo>('/api/auth/me'),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean; token: string }>('/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  users: () => request<UserInfo[]>('/api/admin/users'),
+  createUser: (body: {
+    username: string
+    password: string
+    display_name?: string
+    role?: string
+  }) => request<UserInfo>('/api/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: number, body: Record<string, unknown>) =>
+    request<UserInfo>(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  removeUser: (id: number) =>
+    request<{ ok: boolean; deleted: boolean }>(`/api/admin/users/${id}`, { method: 'DELETE' }),
+  revokeUserSessions: (id: number) =>
+    request<{ ok: boolean; token: string | null }>(`/api/admin/users/${id}/sessions/revoke`, {
+      method: 'POST',
+    }),
+  revokeAllSessions: () =>
+    request<{ ok: boolean; token: string }>('/api/admin/users/sessions/revoke-all', {
+      method: 'POST',
+    }),
+
   environments: () => request<EnvironmentInfo[]>('/api/environments'),
   patterns: () => request<PatternInfo[]>('/api/patterns'),
   patternFields: (pattern: number, type: number) =>
