@@ -38,7 +38,14 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
     """The API wired to a temp instance directory and the mock tax service."""
     cert_pem, key_pem = credential_pems
 
-    settings = Settings(instance_dir=tmp_path)
+    # Signing material lives on the server, placed out of band — never uploaded.
+    key_dir = tmp_path / "keys"
+    key_dir.mkdir()
+    (key_dir / "dev.crt").write_bytes(cert_pem)
+    (key_dir / "dev.pem").write_bytes(key_pem)
+    (key_dir / "dev.pem").chmod(0o600)
+
+    settings = Settings(instance_dir=tmp_path, key_dir=key_dir)
     profiles = ProfileStore(tmp_path / "profiles.json", PASSPHRASE)
     records = RecordStore(tmp_path / "records.sqlite")
 
@@ -47,8 +54,8 @@ def api(tmp_path, credential_pems, monkeypatch, mock_transport):
             name=PROFILE,
             memory_id=MEMORY_ID,
             environment=Environment.SANDBOX,
-            certificate_pem=cert_pem,
-            private_key_pem=key_pem,
+            certificate_file="dev.crt",
+            private_key_file="dev.pem",
             economic_code="14003778990",
             # Points the client at the in-process mock. No /requestsmanager prefix:
             # the mock serves /api/v2 at its root.
@@ -173,17 +180,16 @@ async def test_profiles_never_expose_key_material(client: httpx.AsyncClient) -> 
 
 
 async def test_creating_a_profile_binds_environment_to_memory_id(
-    client: httpx.AsyncClient, credential_pems
+    client: httpx.AsyncClient
 ) -> None:
-    cert_pem, key_pem = credential_pems
     response = await client.post(
         "/api/profiles",
         json={
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "tp",  # the subdomain spelling must resolve
-            "certificate_pem": cert_pem.decode(),
-            "private_key_pem": key_pem.decode(),
+            "certificate_file": "dev.crt",
+            "private_key_file": "dev.pem",
         },
     )
     assert response.status_code == 201, response.text
@@ -192,18 +198,15 @@ async def test_creating_a_profile_binds_environment_to_memory_id(
     assert body["base_url"] == "https://tp.tax.gov.ir/requestsmanager"
 
 
-async def test_an_unknown_environment_is_refused(
-    client: httpx.AsyncClient, credential_pems
-) -> None:
-    cert_pem, key_pem = credential_pems
+async def test_an_unknown_environment_is_refused(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/api/profiles",
         json={
             "name": "x",
             "memory_id": "C33333",
             "environment": "staging",
-            "certificate_pem": cert_pem.decode(),
-            "private_key_pem": key_pem.decode(),
+            "certificate_file": "dev.crt",
+            "private_key_file": "dev.pem",
         },
     )
     assert response.status_code == 400
@@ -286,19 +289,16 @@ async def test_goods_catalogue_with_one_default(client: httpx.AsyncClient) -> No
     assert [g["stuff_id"] for g in listing if g["is_default"]] == ["2710000138624"]
 
 
-async def test_reference_data_is_scoped_to_a_profile(
-    client: httpx.AsyncClient, credential_pems
-) -> None:
+async def test_reference_data_is_scoped_to_a_profile(client: httpx.AsyncClient) -> None:
     """A buyer entered against sandbox must not appear on a production invoice."""
-    cert_pem, key_pem = credential_pems
     await client.post(
         "/api/profiles",
         json={
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "production",
-            "certificate_pem": cert_pem.decode(),
-            "private_key_pem": key_pem.decode(),
+            "certificate_file": "dev.crt",
+            "private_key_file": "dev.pem",
         },
     )
     await client.post(
@@ -416,22 +416,137 @@ async def test_dashboard_counts_every_state_including_zeros(
     assert len(body["recent"]) == 1
 
 
-async def test_dashboard_is_scoped_to_the_selected_profile(
-    client: httpx.AsyncClient, credential_pems
-) -> None:
+async def test_dashboard_is_scoped_to_the_selected_profile(client: httpx.AsyncClient) -> None:
     """Switching environment must switch the numbers, not merge them."""
-    cert_pem, key_pem = credential_pems
     await client.post(
         "/api/profiles",
         json={
             "name": "عملیاتی",
             "memory_id": "B22327",
             "environment": "production",
-            "certificate_pem": cert_pem.decode(),
-            "private_key_pem": key_pem.decode(),
+            "certificate_file": "dev.crt",
+            "private_key_file": "dev.pem",
         },
     )
     await client.post(f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": valid_invoice()})
 
     assert (await client.get(f"/api/profiles/{PROFILE}/dashboard")).json()["counts"]["sent"] == 1
     assert (await client.get("/api/profiles/عملیاتی/dashboard")).json()["counts"]["total"] == 0
+
+
+# --------------------------------------------------- keys never cross the wire
+
+
+async def test_key_files_lists_names_and_modes_but_never_contents(
+    client: httpx.AsyncClient,
+) -> None:
+    """The admin picker. Listing a key directory must not leak the keys."""
+    body = (await client.get("/api/key-files")).json()
+    assert [f["name"] for f in body["keys"]] == ["dev.pem"]
+    assert [f["name"] for f in body["certificates"]] == ["dev.crt", "dev.pem"]
+
+    raw = (await client.get("/api/key-files")).text
+    assert "PRIVATE KEY" not in raw
+    assert "MII" not in raw, "no base64 key body may appear in the listing"
+
+    private = next(f for f in body["keys"] if f["name"] == "dev.pem")
+    assert private["mode"] == "0600"
+    assert private["worldReadable"] is False
+
+
+async def test_no_endpoint_accepts_a_pem(client: httpx.AsyncClient, credential_pems) -> None:
+    """The upload path is gone by construction, not by validation.
+
+    ProfileIn has no field that could hold key material, so a client that tries
+    to send one is simply ignored — and the profile still refers to files.
+    """
+    cert_pem, key_pem = credential_pems
+    response = await client.post(
+        "/api/profiles",
+        json={
+            "name": "smuggle",
+            "memory_id": "D44444",
+            "environment": "sandbox",
+            "certificate_file": "dev.crt",
+            "private_key_file": "dev.pem",
+            # These are not fields on the schema; they must not take effect.
+            "certificate_pem": cert_pem.decode(),
+            "private_key_pem": key_pem.decode(),
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["certificate_file"] == "dev.crt"
+    assert "private_key_pem" not in body
+    assert "certificate_pem" not in body
+
+
+@pytest.mark.parametrize(
+    "attempt",
+    ["../../../etc/passwd", "/etc/passwd", "sub/dir.pem", ".hidden.pem", "..", ""],
+)
+async def test_a_key_filename_cannot_escape_the_key_directory(
+    client: httpx.AsyncClient, attempt: str
+) -> None:
+    """Profile fields arrive over HTTP, so a filename is untrusted input.
+
+    Without containment, naming a path here turns profile creation into an
+    arbitrary local file read.
+    """
+    response = await client.post(
+        "/api/profiles",
+        json={
+            "name": f"traversal-{abs(hash(attempt))}",
+            "memory_id": "E55555",
+            "environment": "sandbox",
+            "certificate_file": "dev.crt",
+            "private_key_file": attempt,
+        },
+    )
+    assert response.status_code in (400, 422), response.text
+
+
+async def test_a_profile_naming_a_missing_key_is_refused_at_creation(
+    client: httpx.AsyncClient,
+) -> None:
+    """Better a 400 now than a failed submission later, after a serial is at risk."""
+    response = await client.post(
+        "/api/profiles",
+        json={
+            "name": "absent",
+            "memory_id": "F66666",
+            "environment": "sandbox",
+            "certificate_file": "dev.crt",
+            "private_key_file": "not-there.pem",
+        },
+    )
+    assert response.status_code == 400
+    assert "not present in the key directory" in response.json()["detail"]
+
+
+async def test_a_mismatched_key_pair_is_refused_at_creation(
+    client: httpx.AsyncClient, tmp_path, api
+) -> None:
+    """A key that does not match its certificate authenticates to nothing."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    (tmp_path / "keys" / "other.pem").write_bytes(
+        other.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    response = await client.post(
+        "/api/profiles",
+        json={
+            "name": "mismatch",
+            "memory_id": "G77777",
+            "environment": "sandbox",
+            "certificate_file": "dev.crt",
+            "private_key_file": "other.pem",
+        },
+    )
+    assert response.status_code == 400

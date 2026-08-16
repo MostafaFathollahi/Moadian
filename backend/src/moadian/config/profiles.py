@@ -17,9 +17,9 @@ import os
 import re
 import secrets
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cryptography import x509
 from cryptography.exceptions import InvalidTag
@@ -27,7 +27,11 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from moadian.config.environment import Environment
+from moadian.config.keyring import KeyRing
 from moadian.errors import ConfigurationError
+
+if TYPE_CHECKING:  # avoids importing crypto at module scope
+    from moadian.crypto import SigningCredentials
 
 __all__ = ["Profile", "ProfileStore"]
 
@@ -57,21 +61,21 @@ def _unb64(text: str, field: str) -> bytes:
 
 @dataclass
 class Profile:
-    """One fiscal memory's credentials.
+    """One fiscal memory: which environment, which identity, which key files.
 
-    ``certificate_pem`` and ``private_key_pem`` are ``repr=False``: the key is an
-    *unencrypted* PKCS#8 PEM, and the generated ``__repr__`` is exactly what a
-    ``logger.exception`` with locals, a debugger frame dump, or a stray ``print``
-    would render. Keeping the signing credential out of that string is cheaper
-    than auditing every call site that might stringify a profile. Use
-    :meth:`redacted` when a description is wanted.
+    Carries **filenames, never key bytes**. The signing material lives in the
+    server-side key directory (:class:`~moadian.config.keyring.KeyRing`) and is
+    placed there out of band, so a private key never appears in a request body,
+    a response, a log line or a browser. See that module for the reasoning and
+    the trade-off.
     """
 
     name: str
     memory_id: str
     environment: Environment
-    certificate_pem: bytes = field(repr=False)
-    private_key_pem: bytes = field(repr=False)
+    #: Filenames inside the key directory — bare names, never paths.
+    certificate_file: str
+    private_key_file: str
     economic_code: str | None = None
     #: Overrides the environment's URL. For pointing tests at the in-process mock
     #: — not for reaching the real service, which lives at exactly two addresses.
@@ -104,26 +108,38 @@ class Profile:
         if self.base_url.endswith("/"):
             # URLs are built by string join, so a trailing slash yields "//api/v2".
             raise ConfigurationError(f"base_url {self.base_url!r} must not end with '/'")
-        if not self.certificate_pem:
-            raise ConfigurationError("certificate_pem is empty")
-        if not self.private_key_pem:
-            raise ConfigurationError("private_key_pem is empty")
-        self._certificate()
+        if not self.certificate_file:
+            raise ConfigurationError("certificate_file is empty")
+        if not self.private_key_file:
+            raise ConfigurationError("private_key_file is empty")
         if self.economic_code is not None and not self.economic_code.isdigit():
             raise ConfigurationError(f"economic_code {self.economic_code!r} must be digits")
 
-    def _certificate(self) -> x509.Certificate:
+    def certificate(self, keyring: KeyRing) -> x509.Certificate:
+        """Load the certificate from the key directory.
+
+        The certificate is public — it is embedded in every JWS as ``x5c`` — so
+        reading it for display is safe. The private key is deliberately *not*
+        exposed by any method here; only :meth:`load_credentials` touches it, and
+        it returns a signing object rather than bytes.
+        """
+        path = keyring.resolve(self.certificate_file)
         try:
-            return x509.load_pem_x509_certificate(self.certificate_pem)
-        except ValueError as exc:
+            return x509.load_pem_x509_certificate(path.read_bytes())
+        except (OSError, ValueError) as exc:
             raise ConfigurationError(
-                f"certificate for profile {self.name!r} is not valid PEM"
+                f"certificate {self.certificate_file!r} for profile {self.name!r} "
+                "is not readable PEM"
             ) from exc
 
-    def redacted(self) -> dict[str, Any]:
-        """A description safe to hand to a UI or a log. Carries no key material."""
-        cert = self._certificate()
-        return {
+    def redacted(self, keyring: KeyRing | None = None) -> dict[str, Any]:
+        """A description safe to hand to a UI or a log. Carries no key material.
+
+        Without a keyring the certificate is not read, so the summary omits the
+        subject and expiry rather than failing — a profile whose files have gone
+        missing should still be listable and fixable in the admin panel.
+        """
+        base: dict[str, Any] = {
             "name": self.name,
             "memory_id": self.memory_id,
             "environment": str(self.environment),
@@ -131,14 +147,44 @@ class Profile:
             "is_production": self.environment.is_production,
             "base_url": self.base_url,
             "economic_code": self.economic_code,
-            "certificate": {
-                "subject": cert.subject.rfc4514_string(),
-                # Hex, because the decimal form of a 20-byte serial is unreadable.
-                "serial_number": format(cert.serial_number, "x"),
-                "not_before": cert.not_valid_before_utc.isoformat(),
-                "not_after": cert.not_valid_after_utc.isoformat(),
-            },
+            "certificate_file": self.certificate_file,
+            "private_key_file": self.private_key_file,
+            "certificate": None,
         }
+        if keyring is None:
+            return base
+        try:
+            cert = self.certificate(keyring)
+        except ConfigurationError as exc:
+            base["certificate_error"] = str(exc)
+            return base
+        base["certificate"] = {
+            "subject": cert.subject.rfc4514_string(),
+            # Hex, because the decimal form of a 20-byte serial is unreadable.
+            "serial_number": format(cert.serial_number, "x"),
+            "not_before": cert.not_valid_before_utc.isoformat(),
+            "not_after": cert.not_valid_after_utc.isoformat(),
+            "national_id": _subject_serial_number(cert),
+        }
+        return base
+
+    def load_credentials(self, keyring: KeyRing) -> SigningCredentials:
+        """Read the key pair from disk and return a signing object.
+
+        The only place private key bytes are read. They go straight into a
+        :class:`SigningCredentials` and are never returned, stored on the profile
+        or serialised. An encrypted PKCS#8 key is unlocked with the passphrase
+        from the environment.
+        """
+        from moadian.crypto import SigningCredentials as _Credentials
+
+        cert_path = keyring.resolve(self.certificate_file)
+        key_path = keyring.resolve(self.private_key_file)
+        credentials = _Credentials.from_files(
+            cert_path, key_path, key_password=keyring.passphrase()
+        )
+        credentials.assert_usable()
+        return credentials
 
     def _to_json(self) -> dict[str, Any]:
         return {
@@ -146,8 +192,8 @@ class Profile:
             "memory_id": self.memory_id,
             "environment": str(self.environment),
             "base_url_override": self.base_url_override,
-            "certificate_pem": _b64(self.certificate_pem),
-            "private_key_pem": _b64(self.private_key_pem),
+            "certificate_file": self.certificate_file,
+            "private_key_file": self.private_key_file,
             "economic_code": self.economic_code,
         }
 
@@ -158,8 +204,8 @@ class Profile:
                 name=data["name"],
                 memory_id=data["memory_id"],
                 environment=Environment.parse(data["environment"]),
-                certificate_pem=_unb64(data["certificate_pem"], "certificate_pem"),
-                private_key_pem=_unb64(data["private_key_pem"], "private_key_pem"),
+                certificate_file=data["certificate_file"],
+                private_key_file=data["private_key_file"],
                 economic_code=data.get("economic_code"),
                 base_url_override=data.get("base_url_override"),
             )
@@ -300,3 +346,11 @@ class ProfileStore:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
             raise
+
+
+def _subject_serial_number(cert: x509.Certificate) -> str | None:
+    """The کد ملی/شناسه ملی the organization matches against `tins`."""
+    from cryptography.x509.oid import NameOID
+
+    values = cert.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)
+    return values[0].value if values else None

@@ -27,7 +27,6 @@ from moadian.crypto import (
     JweEncryptor,
     Pkcs8Signatory,
     Signatory,
-    SigningCredentials,
     canonical_json,
 )
 from moadian.errors import TaxApiError, TransportError, describe
@@ -181,8 +180,9 @@ class MoadianClient:
         because a memory id is issued per environment and is not portable: pairing
         a production URL with a sandbox identity is the mistake this prevents.
 
-        The signatory is built from the profile's own certificate, so the identity
-        that signs is always the one the profile names.
+        The signatory is built from the key files the profile names, read from
+        the server-side key directory. Key bytes are never carried on the profile
+        and never cross the HTTP boundary — see :mod:`moadian.config.keyring`.
         """
         # Imported here, not at module scope: config depends on nothing in client,
         # and the TYPE_CHECKING guard above keeps that direction one-way.
@@ -190,10 +190,7 @@ class MoadianClient:
 
         profile.validate()
         settings = settings or _Settings()
-        credentials = SigningCredentials.from_pem(
-            profile.certificate_pem, profile.private_key_pem
-        )
-        credentials.assert_usable()
+        credentials = profile.load_credentials(settings.keyring)
         return cls(
             base_url=profile.base_url_override or settings.base_url(profile.environment),
             client_id=profile.memory_id,

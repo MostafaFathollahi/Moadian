@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from moadian.config import Environment, Profile, ProfileStore, Settings
+from moadian.config.keyring import KeyRing
 from moadian.errors import (
     ConfigurationError,
     CryptographyError,
@@ -57,14 +58,29 @@ def credentials() -> tuple[bytes, bytes]:
 
 
 @pytest.fixture
-def profile(credentials: tuple[bytes, bytes]) -> Profile:
+def key_dir(tmp_path_factory, credentials: tuple[bytes, bytes]) -> Path:
+    """A server-side key directory. Signing material is placed here out of band."""
     cert_pem, key_pem = credentials
+    directory = tmp_path_factory.mktemp("keys")
+    (directory / "dev.crt").write_bytes(cert_pem)
+    (directory / "dev.pem").write_bytes(key_pem)
+    (directory / "dev.pem").chmod(0o600)
+    return directory
+
+
+@pytest.fixture
+def keyring(key_dir: Path) -> KeyRing:
+    return KeyRing(key_dir)
+
+
+@pytest.fixture
+def profile(credentials: tuple[bytes, bytes]) -> Profile:
     return Profile(
         name="sandbox",
         memory_id="A1B2C3",
         environment=Environment.SANDBOX,
-        certificate_pem=cert_pem,
-        private_key_pem=key_pem,
+        certificate_file="dev.crt",
+        private_key_file="dev.pem",
         economic_code="14001234567",
     )
 
@@ -105,9 +121,8 @@ def test_validate_accepts_a_good_profile(profile: Profile) -> None:
         ("memory_id", "A1B2C3D"),
         ("base_url_override", "sandboxrc.tax.gov.ir"),  # no scheme
         ("base_url_override", "https://sandboxrc.tax.gov.ir/requestsmanager/"),  # trailing slash
-        ("certificate_pem", b""),
-        ("certificate_pem", b"not a certificate"),
-        ("private_key_pem", b""),
+        ("certificate_file", ""),
+        ("private_key_file", ""),
         ("economic_code", "14A01234567"),
     ],
 )
@@ -117,22 +132,24 @@ def test_validate_rejects_bad_fields(profile: Profile, field: str, value: object
         profile.validate()
 
 
-def test_redacted_omits_key_material(profile: Profile) -> None:
-    view = profile.redacted()
+def test_redacted_omits_key_material(profile: Profile, keyring) -> None:
+    view = profile.redacted(keyring)
     flat = json.dumps(view, ensure_ascii=False)
     assert "PRIVATE KEY" not in flat
     assert "CERTIFICATE" not in flat
-    assert profile.private_key_pem.decode() not in flat
-    assert profile.certificate_pem.decode() not in flat
-    assert set(view) == {
+    # Stronger than "does not leak": a Profile holds no key bytes at all, so
+    # there is nothing for a serialiser, a log line or a repr to expose.
+    assert not hasattr(profile, "private_key_pem")
+    assert not hasattr(profile, "certificate_pem")
+    assert "PRIVATE KEY" not in flat
+    assert set(view) >= {
         "name",
         "memory_id",
         "environment",
-        "environment_label",
-        "is_production",
         "base_url",
         "economic_code",
-        "certificate",
+        "certificate_file",
+        "private_key_file",
     }
     assert view["memory_id"] == "A1B2C3"
     assert view["economic_code"] == "14001234567"
@@ -145,10 +162,12 @@ def test_repr_and_str_carry_no_key_material(profile: Profile) -> None:
     for text in (repr(profile), str(profile), f"{profile}", f"{profile!r}"):
         assert "PRIVATE KEY" not in text
         assert "BEGIN" not in text
-        assert profile.private_key_pem.decode() not in text
-        assert profile.certificate_pem.decode() not in text
+        assert "PRIVATE KEY" not in text
         assert "certificate_pem" not in text
         assert "private_key_pem" not in text
+        # Filenames are fine to show — they are not secret and the admin panel
+        # needs them to tell an operator which file a profile points at.
+        assert "dev.pem" in text or "dev.crt" in text
 
 
 def test_repr_still_identifies_the_profile(profile: Profile) -> None:
@@ -163,7 +182,7 @@ def test_repr_of_a_container_of_profiles_is_safe(profile: Profile) -> None:
     profiles caught in a traceback."""
     text = repr({"sandbox": profile, "list": [profile]})
     assert b"BEGIN PRIVATE KEY" not in text.encode()
-    assert profile.private_key_pem.decode() not in text
+    assert "PRIVATE KEY" not in text
 
 
 def test_profile_store_repr_hides_the_passphrase(tmp_path: Path) -> None:
@@ -174,10 +193,20 @@ def test_profile_store_repr_hides_the_passphrase(tmp_path: Path) -> None:
         assert "profiles.json" in text
 
 
-def test_redacted_summarises_the_certificate(profile: Profile) -> None:
-    cert = profile.redacted()["certificate"]
-    assert set(cert) == {"subject", "serial_number", "not_before", "not_after"}
+def test_redacted_summarises_the_certificate(profile: Profile, keyring) -> None:
+    cert = profile.redacted(keyring)["certificate"]
+    # national_id is surfaced so the admin panel can show the کد ملی the
+    # organization will match against `tins` — a mismatch there is error 4103,
+    # and the operator should be able to see it before submitting.
+    assert set(cert) == {
+        "subject",
+        "serial_number",
+        "not_before",
+        "not_after",
+        "national_id",
+    }
     assert cert["serial_number"] == "1234abcd"
+    assert cert["national_id"] == "1234567890"
     assert "1234567890" in cert["subject"]  # SERIALNUMBER holds the کد ملی
     assert dt.datetime.fromisoformat(cert["not_before"]) < dt.datetime.fromisoformat(
         cert["not_after"]

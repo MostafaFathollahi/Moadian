@@ -76,8 +76,8 @@ def test_profile_derives_its_url_from_its_environment(credential_pems) -> None:
         name="prod",
         memory_id="A1B2C3",
         environment=Environment.PRODUCTION,
-        certificate_pem=cert_pem,
-        private_key_pem=key_pem,
+        certificate_file="dev.crt",
+        private_key_file="dev.pem",
     )
     assert profile.base_url == "https://tp.tax.gov.ir/requestsmanager"
 
@@ -91,8 +91,8 @@ def test_profile_accepts_a_spelling_for_its_environment(credential_pems) -> None
         name="p",
         memory_id="A1B2C3",
         environment="tp",  # type: ignore[arg-type]
-        certificate_pem=credential_pems[0],
-        private_key_pem=credential_pems[1],
+        certificate_file="dev.crt",
+        private_key_file="dev.pem",
     )
     assert profile.environment is Environment.PRODUCTION
 
@@ -102,8 +102,8 @@ def test_override_is_honoured_for_pointing_at_a_mock(credential_pems) -> None:
         name="mock",
         memory_id="A1B2C3",
         environment=Environment.SANDBOX,
-        certificate_pem=credential_pems[0],
-        private_key_pem=credential_pems[1],
+        certificate_file="dev.crt",
+        private_key_file="dev.pem",
         base_url_override="http://testserver/requestsmanager",
     )
     assert profile.base_url == "http://testserver/requestsmanager"
@@ -118,8 +118,8 @@ def test_environment_survives_a_store_round_trip(tmp_path, credential_pems) -> N
             name="live-filing",
             memory_id="B9Z8Y7",
             environment=Environment.PRODUCTION,
-            certificate_pem=cert_pem,
-            private_key_pem=key_pem,
+            certificate_file="dev.crt",
+            private_key_file="dev.pem",
         )
     )
 
@@ -142,8 +142,8 @@ def test_two_profiles_keep_separate_memory_ids(tmp_path, credential_pems) -> Non
                 name=name,
                 memory_id=memory,
                 environment=env,
-                certificate_pem=cert_pem,
-                private_key_pem=key_pem,
+                certificate_file="dev.crt",
+                private_key_file="dev.pem",
             )
         )
 
@@ -159,8 +159,8 @@ def test_redacted_tells_a_ui_which_environment_it_is(credential_pems) -> None:
         name="p",
         memory_id="A1B2C3",
         environment=Environment.PRODUCTION,
-        certificate_pem=credential_pems[0],
-        private_key_pem=credential_pems[1],
+        certificate_file="dev.crt",
+        private_key_file="dev.pem",
     )
     view = profile.redacted()
     assert view["environment"] == "production"

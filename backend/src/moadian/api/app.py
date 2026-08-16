@@ -27,6 +27,7 @@ from moadian.client import MoadianClient
 from moadian.config import Environment, Profile, ProfileStore, Settings
 from moadian.errors import (
     ConfigurationError,
+    CryptographyError,
     InvoiceValidationError,
     MoadianError,
     TaxApiError,
@@ -52,13 +53,19 @@ __all__ = ["create_app"]
 
 
 class ProfileIn(BaseModel):
-    """A new profile. The PEMs are write-only — nothing reads them back out."""
+    """A new profile.
+
+    Carries **filenames, not key material**. The certificate and private key are
+    placed in the server-side key directory out of band; this endpoint only
+    records which of them a fiscal memory uses. There is deliberately no field
+    here that could hold a PEM.
+    """
 
     name: str
     memory_id: str = Field(description="شناسه یکتای حافظه مالیاتی, 6 chars of A-Z0-9")
     environment: str = Field(description="sandbox | production (also tp, operational)")
-    certificate_pem: str
-    private_key_pem: str
+    certificate_file: str = Field(description="Filename in the server key directory")
+    private_key_file: str = Field(description="Filename in the server key directory")
     economic_code: str | None = None
     base_url_override: str | None = Field(
         default=None, description="Testing only — points at a mock instead of the real service"
@@ -166,6 +173,18 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
 
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
+    @app.exception_handler(CryptographyError)
+    async def _crypto_error(_request, exc: CryptographyError):
+        """An unusable certificate or key is operator configuration, not a bug.
+
+        Reported as 400 with the reason — an expired certificate or a key that
+        does not match its certificate is something the admin panel must show,
+        not a 500 that reads as "the server is broken".
+        """
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
     # -- metadata: what the UI needs to build its forms -------------------
 
     @app.get("/api/environments", tags=["metadata"])
@@ -225,31 +244,56 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     # -- profiles ---------------------------------------------------------
 
     @app.get("/api/profiles", tags=["admin"])
-    def list_profiles(store: Annotated[ProfileStore, Depends(get_profile_store)]):
+    def list_profiles(
+        store: Annotated[ProfileStore, Depends(get_profile_store)],
+        settings: Annotated[Settings, Depends(get_settings)],
+    ):
         """Every configured fiscal memory. Redacted — no key material leaves here."""
-        return [store.load(name).redacted() for name in store.list_names()]
+        return [store.load(name).redacted(settings.keyring) for name in store.list_names()]
 
     @app.post("/api/profiles", status_code=201, tags=["admin"])
     def create_profile(
         body: ProfileIn,
         store: Annotated[ProfileStore, Depends(get_profile_store)],
+        settings: Annotated[Settings, Depends(get_settings)],
     ):
         profile = Profile(
             name=body.name,
             memory_id=body.memory_id,
             environment=Environment.parse(body.environment),
-            certificate_pem=body.certificate_pem.encode(),
-            private_key_pem=body.private_key_pem.encode(),
+            certificate_file=body.certificate_file,
+            private_key_file=body.private_key_file,
             economic_code=body.economic_code,
             base_url_override=body.base_url_override,
         )
         profile.validate()
+        # Prove the named files exist and pair up before storing the profile.
+        # Otherwise the first failure surfaces at submission time, which is the
+        # worst moment to discover a typo in a filename.
+        profile.load_credentials(settings.keyring)
         store.save(profile)
-        return profile.redacted()
+        return profile.redacted(settings.keyring)
 
     @app.get("/api/profiles/{name}", tags=["admin"])
-    def read_profile(profile: ActiveProfile):
-        return profile.redacted()
+    def read_profile(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+    ):
+        return profile.redacted(settings.keyring)
+
+    @app.get("/api/key-files", tags=["admin"])
+    def key_files(settings: Annotated[Settings, Depends(get_settings)]):
+        """What signing material is present on the server, by name.
+
+        Names and permissions only — contents are never read here. This is what
+        the admin panel offers as a picker: an operator drops files into the key
+        directory out of band and then selects them, so no key ever traverses a
+        request, a proxy or a browser.
+        """
+        return {
+            "directory": str(settings.key_dir),
+            **settings.keyring.list_files(),
+        }
 
     @app.delete("/api/profiles/{name}", status_code=204, tags=["admin"])
     def delete_profile(name: str, store: Annotated[ProfileStore, Depends(get_profile_store)]):
@@ -485,11 +529,12 @@ def create_app(*, cors_origins: list[str] | None = None) -> FastAPI:
     def dashboard(
         profile: ActiveProfile,
         store: Annotated[RecordStore, Depends(get_record_store)],
+        settings: Annotated[Settings, Depends(get_settings)],
     ):
         """Aggregated counts for the summary cards, scoped to this fiscal memory."""
         counts = store.counts_by_state(profile.name)
         return {
-            "profile": profile.redacted(),
+            "profile": profile.redacted(settings.keyring),
             "counts": counts,
             "recent": store.list_invoices(profile.name, limit=10),
         }

@@ -7,6 +7,7 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from moadian.config.environment import Environment
+from moadian.config.keyring import KeyRing
 
 __all__ = ["Settings"]
 
@@ -33,6 +34,11 @@ class Settings(BaseSettings):
     # Holds the profile store, the taxid serial counter, and cached server keys.
     instance_dir: Path = Path("instance")
 
+    #: Where signing material lives, placed by an operator out of band. Private
+    #: keys are read from here and never accepted over HTTP — see
+    #: moadian.config.keyring for why. Override with MOADIAN_KEY_DIR.
+    key_dir: Path = Path("instance/keys")
+
     def base_url(self, environment: str | Environment = Environment.SANDBOX) -> str:
         """The base URL for an environment.
 
@@ -43,6 +49,11 @@ class Settings(BaseSettings):
         """
         env = Environment.parse(environment)
         return self.production_base_url if env.is_production else self.sandbox_base_url
+
+    @property
+    def keyring(self) -> KeyRing:
+        """The server-side key directory this deployment reads signing material from."""
+        return KeyRing(self.key_dir)
 
     @property
     def profile_store_path(self) -> Path:
