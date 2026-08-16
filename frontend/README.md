@@ -51,6 +51,23 @@ token so an admin cannot lock themselves out doing it.
 > it, where an httpOnly cookie could not. Acceptable while this is single-operator
 > on localhost or behind an authenticated proxy; revisit before exposing it wider.
 
+## Typography
+
+**Vazirmatn** (SIL OFL 1.1), bundled via `@fontsource-variable/vazirmatn` and
+self-hosted — never a CDN. This app handles tax data and often runs on a machine
+with no route to the public internet, so a third-party font request would be
+both a privacy leak and a way for the whole interface to fall back to Tahoma the
+day the CDN is unreachable. Three subsets ship, ~103 KB total, and the variable
+weight means 100..900 costs one file.
+
+`IRANSans` is deliberately **not** in the font stack. It is a commercial font;
+naming it would mean the app renders correctly only on machines that happen to
+have a licensed copy installed, and looks different everywhere else.
+
+Tabular numerals are on globally. The money columns line up only if digit widths
+are fixed, and Persian digits from `toLocaleString('fa-IR')` need the same
+treatment as Latin ones.
+
 ## Things that are deliberate
 
 **One picker, not two.** The sidebar selects a *profile*, and environment comes

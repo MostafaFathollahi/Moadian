@@ -50,7 +50,12 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Vazirmatn, 'IRANSans', Tahoma, system-ui, sans-serif;
+  /* Vazirmatn (SIL OFL) is bundled — see main.tsx. IRANSans is deliberately not
+     in this stack: it is a commercial font, and naming it would mean the app
+     looks right only on machines that happen to have a licensed copy. */
+  font-family: 'Vazirmatn Variable', Vazirmatn, Tahoma, system-ui, sans-serif;
+  /* Persian digits at consistent widths — the money columns depend on it. */
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   line-height: 1.7;
 }
