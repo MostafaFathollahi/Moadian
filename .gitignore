@@ -21,3 +21,69 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### AI coding-assistant conversation archive (local only) ###
+#Exported chat transcripts — may contain project detail/pasted secrets
+code_assistant_conversations/
+#Hook script + machine-specific absolute paths in settings.json
+.claude/
+
+### Signing key material — NEVER commit ###
+#Private keys, certificates and anything resembling them. The tax API's signing
+#key is the credential; leaking it means someone else can issue invoices as you.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.crt
+*.cer
+*.der
+dev-certs/
+certs/
+
+#ONE deliberate exception: the vendor's published sample keypair.
+#It is printed verbatim in the public RC_TICS.IS_v1.6 PDF (the certificate as the
+#x5c of the worked example on p.13, the private key in the appendix), it expired
+#on 2024-03-23, and it belongs to a fictitious taxpayer. It is committed because
+#the byte-exact conformance canary must run on every clone and in CI — with SDK/
+#ignored, the canary would otherwise silently skip and the suite would report
+#green with its most important test missing. See backend/tests/vectors/README.md.
+!backend/tests/vectors/sample_keypair/
+!backend/tests/vectors/sample_keypair/cert1.crt
+!backend/tests/vectors/sample_keypair/privatekey1.pem
+#Encrypted profile store written by the admin panel
+backend/instance/
+*.sqlite
+*.sqlite3
+*.db
+
+### Python ###
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+
+### Node / frontend ###
+node_modules/
+frontend/dist/
+.vite/
+*.local
+
+### Environment ###
+.env
+.env.*
+!.env.example
+
+### OS junk ###
+.DS_Store
+Thumbs.db
+

@@ -1,0 +1,940 @@
+# Pattern × field obligation matrix — RC_IITP_IS_V7_9_1 جدول شماره ۱ (p.14).
+#
+# The 12 الگو (patterns) share most of their ~102 fields and differ in which are
+# اجباری / اختیاری / اجباری در شرایط خاص. That is tabular data, so it lives here
+# rather than in code; the money formulas do not, because several have
+# pattern-specific inputs (see rules/arithmetic.py for why).
+#
+# The block below is GENERATED. Regenerate with
+#   /opt/homebrew/bin/python3.14 backend/tools/extract_table1.py --check
+# which also verifies the transcription against ten independent anchors taken
+# from the §8 per-field tables. Hand edits will be lost.
+#
+# Obligations: required | optional | conditional
+#   by_type  overrides the obligation for a نوع صورتحساب; a field can be اجباری
+#            for نوع اول and اختیاری for نوع دوم.
+#   when     names an evaluable condition. Fields جدول ۱ marks conditional
+#            without the §8 tables naming a trigger carry "unspecified", and the
+#            engine leaves those alone rather than inventing one.
+#   excluded lists fields that are not part of the pattern at all. Sending one is
+#            a structural error — RC_IITP §4: صورتحساب‌های الکترونیکی صرفا شامل
+#            اقلام مذکور بوده و اقلام دیگری را شامل نمی‌شود.
+
+version: 2
+
+defaults:
+  # Fields absent from a pattern's block fall through to this.
+  obligation: optional
+
+patterns:
+  1:
+    name: "فروش"
+    name_en: "Sale"
+    coverage: complete
+    types: [1, 2]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, by_type: {2: optional}, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", by_type: {2: optional}, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      scln: {obligation: optional, by_type: {2: not_applicable}, title: "شماره پروانه گمركي"}
+      scc: {obligation: optional, by_type: {2: not_applicable}, title: "كد گمرك محل اظهار فروشنده"}
+      crn: {obligation: optional, by_type: {2: not_applicable}, title: "شماره قرارداد پيمانكاري"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, by_type: {2: not_applicable}, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ نسيه"}
+      tvop: {obligation: optional, by_type: {2: not_applicable}, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, cno, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  2:
+    name: "فروش ارز"
+    name_en: "Currency sale"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: conditional, when: "unspecified", title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      bpn: {obligation: conditional, when: "unspecified", title: "شماره گذرنامه خريدار"}
+      scln: {obligation: optional, title: "شماره پروانه گمركي"}
+      scc: {obligation: optional, title: "كد گمرك محل اظهار فروشنده"}
+      crn: {obligation: optional, title: "شماره قرارداد پيمانكاري"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      cfee: {obligation: required, title: "ميزان ارز"}
+      cut: {obligation: required, title: "نوع ارز"}
+      exr: {obligation: required, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+      cpr: {obligation: required, title: "نرخ خريد ارز"}
+      sovat: {obligation: required, title: "ماخذ ماليات بر ارزش افزوده در الگوي فروش ارز"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, cdcd, cdcn, cno, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, sg, tid, tinc, tocv, tonw, torv]
+      body: [am, bros, consfee, cui, fee, mu, nw, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  3:
+    name: "صورتحساب طلا، جواهر و پلاتین"
+    name_en: "Gold, jewellery and platinum"
+    coverage: complete
+    types: [1, 2]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, by_type: {2: optional}, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", by_type: {2: optional}, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      crn: {obligation: optional, by_type: {2: not_applicable}, title: "شماره قرارداد پيمانكاري"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, by_type: {2: not_applicable}, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ نسيه"}
+      tvop: {obligation: optional, by_type: {2: not_applicable}, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      consfee: {obligation: required, title: "اجرت ساخت"}
+      spro: {obligation: required, title: "سود فروشنده"}
+      bros: {obligation: required, title: "حق العمل"}
+      tcpbs: {obligation: required, title: "جمع كل اجرت، حق العمل و سود"}
+      cop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+      cui: {obligation: optional, title: "عيار"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, cno, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [cpr, nw, sovat, sscv, ssrv, vba]
+      sg: [sgid, sgt]
+  4:
+    name: "قرارداد پیمانکاری"
+    name_en: "Contracting"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      crn: {obligation: required, title: "شماره قرارداد پيمانكاري"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, cno, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  5:
+    name: "قبوض خدماتی"
+    name_en: "Utility bills"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: optional, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      billid: {obligation: required, title: "شماره اشتراك /شناسه قبض بهره بردار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, bpn, cdcd, cdcn, cno, crn, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, cfee, consfee, cpr, cui, cut, exr, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  6:
+    name: "بلیط هواپیما"
+    name_en: "Air ticket"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: conditional, when: "unspecified", title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: optional, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      ft: {obligation: required, title: "نوع پرواز"}
+      bpn: {obligation: conditional, when: "unspecified", title: "شماره گذرنامه خريدار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      tinc: {obligation: optional, title: "شماره اقتصادي آژانس"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, cdcd, cdcn, cno, crn, dci, dco, did, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  7:
+    name: "صادرات"
+    name_en: "Export"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: optional, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: optional, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      bpn: {obligation: optional, title: "شماره گذرنامه خريدار"}
+      scc: {obligation: optional, title: "كد گمرك محل اظهار فروشنده"}
+      cdcn: {obligation: optional, title: "شماره كوتاژ اظهارنامه گمركي"}
+      cdcd: {obligation: optional, title: "تاريخ كوتاژ اظهارنامه گمركي"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      tonw: {obligation: conditional, when: "unspecified", title: "مجموع وزن خالص"}
+      torv: {obligation: required, title: "مجموع ارزش ريالي"}
+      tocv: {obligation: required, title: "مجموع ارزش ارزي"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      nw: {obligation: conditional, when: "unspecified", title: "وزن خالص"}
+      fee: {obligation: optional, title: "مبلغ واحد"}
+      cut: {obligation: required, title: "نوع ارز"}
+      exr: {obligation: required, title: "نرخ برابري ارز با ريال"}
+      ssrv: {obligation: required, title: "ارزش ريالي كاال"}
+      sscv: {obligation: required, title: "ارزش ارزي كاال"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    excluded:
+      header: [an, asd, asn, billid, cno, crn, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scln, sg, tadis, tax17, tdis, tid, tinc, tprdis]
+      body: [adis, bros, cfee, consfee, cpr, cui, dis, prdis, sovat, spro, tcpbs, vba]
+      payment: [acn, iinn, pcn, pdt, pid, pmt, pv, trmn, trn]
+      sg: [sgid, sgt]
+  8:
+    name: "بارنامه"
+    name_en: "Bill of lading"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      lno: {obligation: required, title: "شماره بارنامه"}
+      lrno: {obligation: optional, title: "شماره بارنامه مرجع"}
+      ocu: {obligation: required, title: "كشور مبدا"}
+      oci: {obligation: conditional, when: "unspecified", title: "شهر مبدا"}
+      dco: {obligation: required, title: "كشور مقصد"}
+      dci: {obligation: conditional, when: "unspecified", title: "شهر مقصد"}
+      tid: {obligation: required, title: "فرستنده شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      rid: {obligation: conditional, when: "unspecified", title: "گيرنده شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      lt: {obligation: required, title: "نوع بارنامه/نوع حمل"}
+      cno: {obligation: required, title: "شماره ناوگان"}
+      did: {obligation: conditional, when: "unspecified", title: "شماره ملي/ كد فراگير اتباع غيرايراني راننده در حمل و نقل جاده اي"}
+      sg: {obligation: required, title: "كاالهاي حمل شده"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    sg:
+      sgid: {obligation: required, title: "شناسه كاالي حمل شده"}
+      sgt: {obligation: required, title: "شرح كاالي حمل شده"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, crn, ft, in, scc, scln, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, mu, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+  9:
+    name: "فروش فرآورده‌های نفتی (پالایش و پخش)"
+    name_en: "Petroleum products"
+    coverage: complete
+    types: [1, 2]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, by_type: {2: optional}, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", by_type: {2: optional}, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, by_type: {2: not_applicable}, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ نسيه"}
+      tvop: {obligation: optional, by_type: {2: not_applicable}, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: conditional, when: "unspecified", title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+      vba: {obligation: conditional, when: "unspecified", title: "مبلغ پايه ماليات بر ارزش افزوده"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, cno, crn, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs]
+      sg: [sgid, sgt]
+  11:
+    name: "بورس اوراق بهادار مبتنی بر کالا"
+    name_en: "Commodity-backed securities"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: optional, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: optional, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      asn: {obligation: required, title: "شماره اعالميه فروش بورس"}
+      asd: {obligation: required, title: "تاريخ اعالميه فروش بورس"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: required, title: "واحد اندازه گيري"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+      cui: {obligation: optional, title: "عيار"}
+    excluded:
+      header: [an, billid, bpn, cdcd, cdcn, cno, crn, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tax17, tdis, tid, tinc, tocv, todam, tonw, torv, tprdis]
+      body: [bros, bsrn, cfee, consfee, cpr, cut, dis, exr, fee, nw, odam, odr, odt, olam, olr, olt, prdis, sovat, spro, sscv, ssrv, tcpbs, vba]
+      payment: [acn, iinn, pcn, pdt, pid, pmt, pv, trmn, trn]
+      sg: [sgid, sgt]
+  13:
+    name: "فروش خدمات بیمه‌ای"
+    name_en: "Insurance services"
+    coverage: complete
+    types: [1, 2]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, by_type: {2: optional}, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: conditional, when: "unspecified", by_type: {2: optional}, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, by_type: {2: not_applicable}, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", by_type: {2: not_applicable}, title: "مبلغ نسيه"}
+      tvop: {obligation: optional, by_type: {2: not_applicable}, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      in: {obligation: required, title: "شناسه يكتاي بيمه نامه"}
+      an: {obligation: optional, title: "شناسه يكتاي الحاقيه"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, by_type: {2: not_applicable}, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [asd, asn, billid, bpn, cdcd, cdcn, cno, crn, dci, dco, did, ft, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+  14:
+    name: "فروش زنجیره‌ای"
+    name_en: "Chain sale"
+    coverage: complete
+    types: [1]
+    reference: "RC_IITP_IS_V7_9_1 جدول شماره ۱"
+    header:
+      taxid: {obligation: required, title: "شماره منحصر به فرد مالياتي"}
+      indatim: {obligation: required, title: "تاريخ و زمان صدور صورتحساب ) ميالدي ("}
+      indati2m: {obligation: conditional, when: "insr == 1", condition_reference: "§6", title: "تاريخ و زمان ثبت صورتحساب ) ميالدي ("}
+      inty: {obligation: required, title: "نوع صورتحساب"}
+      inno: {obligation: optional, title: "سريال صورتحساب داخلي حافظه مالياتي"}
+      irtaxid: {obligation: conditional, when: "ins in (2, 3, 4)", condition_reference: "§5", title: "شماره منحصر به فرد مالياتي صورتحساب مرجع"}
+      inp: {obligation: required, title: "الگوي صورتحساب"}
+      ins: {obligation: required, title: "موضوع صورتحساب"}
+      tins: {obligation: required, title: "شماره اقتصادي فروشنده"}
+      tob: {obligation: required, title: "نوع شخص خريدار"}
+      bid: {obligation: optional, title: "خريدار شناسه ملي/ شماره ملي/ شناسه مشاركت مدني/ كد فراگير اتباع غير ايراني"}
+      tinb: {obligation: required, title: "شماره اقتصادي خريدار"}
+      sbc: {obligation: optional, title: "كد شعبه فروشنده"}
+      bpc: {obligation: optional, title: "كد پستي خريدار"}
+      bbc: {obligation: optional, title: "كد شعبه خريدار"}
+      tprdis: {obligation: required, title: "مجموع مبلغ قبل از كسر تخفيف"}
+      tdis: {obligation: optional, title: "مجموع تخفيفات"}
+      tadis: {obligation: required, title: "مجموع مبلغ پس از كسر تخفيف"}
+      tvam: {obligation: required, title: "مجموع ماليات بر ارزش افزوده"}
+      todam: {obligation: required, title: "مجموع ساير ماليات، عوارض و وجوه قانوني"}
+      tbill: {obligation: required, title: "مجموع صورتحساب"}
+      setm: {obligation: required, title: "روش تسويه"}
+      cap: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ پرداختي نقدي"}
+      insp: {obligation: conditional, when: "setm == 3", condition_reference: "§8-22، جدول ۲۴، ردیف ۳", title: "مبلغ نسيه"}
+      tvop: {obligation: optional, title: "مجموع سهم ماليات بر ارزش افزوده از پرداخت"}
+      tax17: {obligation: optional, title: "ماليات موضوع ماده 7١"}
+      insr: {obligation: conditional, when: "unspecified", title: "قاعده ارسال صورتحساب"}
+      nti1: {obligation: optional, title: "يادداشت ١"}
+      nti2: {obligation: optional, title: "يادداشت 2"}
+    body:
+      sstid: {obligation: required, title: "شناسه كاال/خدمت"}
+      sstt: {obligation: optional, title: "شرح كاال/ خدمت"}
+      am: {obligation: required, title: "تعداد/مقدار"}
+      mu: {obligation: optional, title: "واحد اندازه گيري"}
+      fee: {obligation: required, title: "مبلغ واحد"}
+      cfee: {obligation: optional, title: "ميزان ارز"}
+      cut: {obligation: optional, title: "نوع ارز"}
+      exr: {obligation: optional, title: "نرخ برابري ارز با ريال"}
+      prdis: {obligation: required, title: "مبلغ قبل از تخفيف"}
+      dis: {obligation: required, title: "مبلغ تخفيف"}
+      adis: {obligation: required, title: "مبلغ بعد از تخفيف"}
+      vra: {obligation: required, title: "نرخ ماليات بر ارزش افزوده"}
+      vam: {obligation: required, title: "مبلغ ماليات بر ارزش افزوده"}
+      odt: {obligation: conditional, when: "unspecified", title: "موضوع ساير ماليات و عوارض"}
+      odr: {obligation: conditional, when: "unspecified", title: "نرخ ساير ماليات و عوارض"}
+      odam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير ماليات و عوارض"}
+      olt: {obligation: conditional, when: "unspecified", title: "موضوع ساير وجوه قانوني"}
+      olr: {obligation: conditional, when: "unspecified", title: "نرخ ساير وجوه قانوني"}
+      olam: {obligation: conditional, when: "unspecified", title: "مبلغ ساير وجوه قانوني"}
+      cop: {obligation: optional, title: "سهم نقدي از پرداخت"}
+      vop: {obligation: optional, title: "سهم ماليات بر ارزش افزوده از پرداخت"}
+      bsrn: {obligation: optional, title: "شماره قرارداد معامله از طريق شخص ثالث"}
+      tsstam: {obligation: required, title: "مبلغ كل كاال/خدمت"}
+    payment:
+      iinn: {obligation: optional, title: "شماره سوئيچ پرداخت"}
+      acn: {obligation: optional, title: "شماره پذيرنده فروشگاهي"}
+      trmn: {obligation: optional, title: "شماره پايانه"}
+      pmt: {obligation: optional, title: "روش پرداخت"}
+      trn: {obligation: optional, title: "شماره پيگيري/شماره مرجع"}
+      pcn: {obligation: optional, title: "شماره كارت پرداخت كننده صورتحساب"}
+      pid: {obligation: optional, title: "شماره/شناسه ملي/كد فراگير پرداخت كننده صورتحساب"}
+      pdt: {obligation: optional, title: "تاريخ و زمان پرداخت"}
+      pv: {obligation: optional, title: "مبلغ پرداختي"}
+    excluded:
+      header: [an, asd, asn, billid, bpn, cdcd, cdcn, cno, crn, dci, dco, did, ft, in, lno, lrno, lt, oci, ocu, rid, scc, scln, sg, tid, tinc, tocv, tonw, torv]
+      body: [bros, consfee, cpr, cui, nw, sovat, spro, sscv, ssrv, tcpbs, vba]
+      sg: [sgid, sgt]
+
+# Enumerations the engine range-checks. Values come from the §8 tables, not guesses.
+enums:
+  inty:
+    reference: "§3"
+    values: [1, 2, 3]
+    message: نوع صورتحساب باید یک، دو یا سه باشد.
+  ins:
+    reference: "§5"
+    values: [1, 2, 3, 4]
+    message: موضوع صورتحساب باید اصلی، اصلاحی، ابطالی یا برگشت از فروش باشد.
+  setm:
+    reference: "§8-22، جدول ۲۴، ردیف ۱"
+    values: [1, 2, 3]
+    message: روش تسویه باید نقدی (۱)، نسیه (۲) یا نقدی/نسیه (۳) باشد.
+  tob:
+    reference: "§8-9"
+    values: [1, 2, 3, 4, 5]
+    message: نوع شخص خریدار خارج از مقادیر مجاز است.
+  insr:
+    reference: "§6"
+    values: [1]
+    message: قاعده ارسال صورتحساب تنها می‌تواند برابر یک باشد.
