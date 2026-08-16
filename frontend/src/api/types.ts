@@ -1,0 +1,202 @@
+/** Shapes returned by the backend. Wire field names are kept verbatim.
+ *
+ * `taxid`, `indatim`, `tprdis` and the rest are the organization's names, not
+ * ours. Renaming them for comfort here would mean a translation layer that is
+ * invisible when it goes wrong — the invoice would be rejected by the tax
+ * service with no clue why. They stay ugly on purpose.
+ */
+
+export type Obligation = 'required' | 'optional' | 'conditional' | 'not_applicable'
+
+export interface EnvironmentInfo {
+  value: 'sandbox' | 'production'
+  label: string
+  host: string
+  baseUrl: string
+  isProduction: boolean
+}
+
+export interface CertificateSummary {
+  subject: string
+  serial_number: string
+  not_before: string
+  not_after: string
+  national_id: string | null
+}
+
+export interface ProfileView {
+  name: string
+  memory_id: string
+  environment: 'sandbox' | 'production'
+  environment_label: string
+  is_production: boolean
+  base_url: string
+  economic_code: string | null
+  certificate: CertificateSummary | null
+  certificate_error?: string
+}
+
+export interface MaterialStatus {
+  configured: boolean
+  path: string | null
+  exists: boolean
+  mode: string | null
+  worldReadable: boolean
+  error: string | null
+}
+
+export interface SigningMaterial {
+  environment: string
+  certificate: MaterialStatus
+  privateKey: MaterialStatus
+  keyPassphraseSet: boolean
+}
+
+export interface PatternInfo {
+  number: number
+  name: string
+  nameEn: string
+  types: number[]
+  coverage: string
+}
+
+export interface FieldRule {
+  field: string
+  title: string
+  obligation: Obligation
+  condition: string | null
+  reference: string
+}
+
+export interface PatternFields {
+  pattern: number
+  name: string
+  type: number
+  sections: { header: FieldRule[]; body: FieldRule[]; payment: FieldRule[] }
+}
+
+export interface Buyer {
+  id: number
+  name: string
+  national_id: string
+  economic_code: string | null
+  person_type: number
+  postal_code: string | null
+  branch_code: string | null
+  note: string | null
+}
+
+export interface GoodsService {
+  id: number
+  stuff_id: string
+  description: string
+  unit: string | null
+  vat_rate: number | null
+  default_fee: number | null
+  is_default: boolean
+}
+
+/** A verification finding, already localised by the backend. */
+export interface VerifyIssue {
+  field: string
+  title: string
+  line: number | null
+  rule: string
+  message: string
+  reference: string
+  expected: number | null
+  actual: number | null
+}
+
+export interface VerifyResult {
+  ok: boolean
+  summary: string
+  pattern: number | null
+  patternName: string
+  errors: VerifyIssue[]
+  warnings: VerifyIssue[]
+}
+
+export type InvoiceState =
+  | 'draft'
+  | 'invalid'
+  | 'sent'
+  | 'confirmed'
+  | 'rejected'
+  | 'cancelled'
+
+export interface InvoiceRecord {
+  id: number
+  profile: string
+  state: InvoiceState
+  tax_id: string | null
+  uid: string | null
+  reference_number: string | null
+  payload: InvoicePayload
+  detail: VerifyResult | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Dashboard {
+  profile: ProfileView
+  counts: Record<InvoiceState | 'total', number>
+  recent: InvoiceRecord[]
+}
+
+export interface InvoiceLine {
+  sstid?: string
+  sstt?: string
+  mu?: string
+  am?: number
+  fee?: number
+  prdis?: number
+  dis?: number
+  adis?: number
+  vra?: number
+  vam?: number
+  odam?: number
+  olam?: number
+  tsstam?: number
+  [key: string]: unknown
+}
+
+export interface InvoiceHeader {
+  taxid?: string
+  indatim?: number
+  indati2m?: number
+  inty?: number
+  inno?: string
+  irtaxid?: string
+  inp?: number
+  ins?: number
+  tins?: string
+  tob?: number
+  bid?: string
+  tinb?: string
+  bpc?: string
+  tprdis?: number
+  tdis?: number
+  tadis?: number
+  tvam?: number
+  todam?: number
+  tbill?: number
+  setm?: number
+  cap?: number
+  insp?: number
+  [key: string]: unknown
+}
+
+export interface InvoicePayload {
+  header: InvoiceHeader
+  body: InvoiceLine[]
+  payments?: unknown[]
+}
+
+export interface SubmitResult {
+  id: number
+  state: InvoiceState
+  taxId: string | null
+  uid: string | null
+  referenceNumber: string | null
+}
