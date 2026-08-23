@@ -143,7 +143,17 @@ export function Markdown({ source }: { source: string }) {
       continue
     }
 
-    const paragraph: string[] = []
+    // Everything above either consumed a block or fell through to here, so this
+    // branch has to consume at least one line — unconditionally, on the first
+    // pass. It used to stop before any line starting with # > ` | - or *, which
+    // is right for the *second* line of a paragraph and wrong for the first: a
+    // line opening with inline code, or a `|` that begins no table, matched no
+    // block above and was refused here too, so `index` never advanced and the
+    // renderer spun forever. React never returns from a render that does not
+    // terminate, so the symptom was a blank panel and a frozen tab — which is
+    // exactly what the admin guide did, on one line of inline code.
+    const paragraph: string[] = [lines[index]]
+    index += 1
     while (index < lines.length && lines[index].trim() && !/^[#>`|]|^\s*[-*]\s/.test(lines[index])) {
       paragraph.push(lines[index])
       index += 1

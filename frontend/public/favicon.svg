@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="سامانه مودیان">
+  <title>سامانه مودیان</title>
+  <!-- A receipt with a torn bottom edge: the one object this application is
+       about, and the only shape that still reads as itself at 16px. Solid fill
+       rather than an outline, so it survives being scaled into a tab strip. -->
+  <path fill="#1f6feb"
+        d="M6 2h20a2 2 0 0 1 2 2v25l-4-4-4 4-4-4-4 4-4-4-4 4V4a2 2 0 0 1 2-2z"/>
+  <!-- Two ruled lines, unequal — a full-width row over a short one is what makes
+       the shape read as a document rather than a plain tag. -->
+  <rect x="9" y="9" width="14" height="3" rx="1.5" fill="#ffffff"/>
+  <rect x="9" y="15" width="9" height="3" rx="1.5" fill="#ffffff"/>
+</svg>

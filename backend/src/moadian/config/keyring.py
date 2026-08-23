@@ -130,6 +130,184 @@ class SigningMaterial:
             "keyPassphraseSet": passphrase() is not None,
         }
 
+    def verify(self) -> dict[str, object]:
+        """Does the private key actually belong to the certificate?
+
+        :meth:`describe` answers "are the files there"; this answers "are they a
+        pair". The two failures look identical from outside and both are fatal at
+        a different moment: an unmatched key produces a perfectly well-formed JWS
+        that the organization rejects with a signature error, long after the
+        serial has been spent, and the only clue is a code in جدول کدهای خطا.
+        Checking it costs one RSA modulus comparison, so there is no reason for
+        an operator to ever discover it that way.
+
+        Reads both files and compares the certificate's public modulus and
+        exponent against the private key's. **Returns no key material**: the
+        result carries a boolean, the subject, the validity window, and a
+        fingerprint of the public key — enough to tell two certificates apart,
+        and not enough to be one.
+
+        Never raises. Every failure — missing path, unreadable file, wrong
+        passphrase, unmatched pair — comes back as a report with ``ok`` false and
+        a Persian message, because all of them are things the admin panel has to
+        render rather than turn into a 500.
+        """
+        from datetime import UTC, datetime
+
+        from moadian.crypto.keys import _load_private_key, load_certificate
+        from moadian.errors import CertificateError
+
+        report: dict[str, object] = {
+            "environment": str(self.environment),
+            "environmentLabel": self.environment.label,
+            "certificatePath": str(self.certificate_path) if self.certificate_path else None,
+            "privateKeyPath": str(self.private_key_path) if self.private_key_path else None,
+            "keyPassphraseSet": passphrase() is not None,
+            "ok": False,
+            "matches": None,
+            "certificate": None,
+            "message": "",
+        }
+
+        try:
+            certificate_path, private_key_path = self.require()
+        except ConfigurationError as exc:
+            report["message"] = _persian_material_error(exc)
+            return report
+
+        # The certificate first and on its own. It is the half that carries the
+        # identity, and an operator whose key is merely locked still needs to see
+        # *which* certificate is deployed — that is half of what this button is
+        # for. Reading them together would throw both away over one failure.
+        try:
+            certificate = load_certificate(certificate_path.read_bytes())
+        except (CertificateError, OSError) as exc:
+            report["message"] = f"فایل گواهی ({certificate_path}) خوانده یا تفسیر نشد: {exc}"
+            return report
+
+        report["certificate"] = _certificate_summary(certificate)
+
+        try:
+            private_key = _load_private_key(private_key_path.read_bytes(), passphrase())
+        except (CertificateError, OSError) as exc:
+            report["message"] = _persian_key_error(exc, private_key_path)
+            return report
+
+        # The match before the dates: a mismatched pair and an expired
+        # certificate are different problems with different fixes, and an
+        # operator told only "unusable" cannot tell which one they have.
+        matches = _keys_match(certificate, private_key)
+        report["matches"] = matches
+        if not matches:
+            report["message"] = (
+                "کلید خصوصی با گواهی مطابقت ندارد. کلید عمومیِ استخراج‌شده از فایل گواهی "
+                f"({certificate_path}) با کلید خصوصی ({private_key_path}) یک زوج نیستند؛ "
+                "امضا تولید می‌شود ولی سامانه مودیان آن را رد می‌کند. معمولاً یعنی یکی از "
+                "دو فایل مربوط به درخواست صدور دیگری است."
+            )
+            return report
+
+        now = datetime.now(UTC)
+        not_before = certificate.not_valid_before_utc
+        not_after = certificate.not_valid_after_utc
+        if now < not_before:
+            report["message"] = (
+                f"کلید و گواهی زوج هستند، ولی گواهی تا {not_before.date().isoformat()} "
+                "معتبر نمی‌شود."
+            )
+            return report
+        if now > not_after:
+            report["message"] = (
+                f"کلید و گواهی زوج هستند، ولی گواهی در {not_after.date().isoformat()} "
+                "منقضی شده است."
+            )
+            return report
+
+        report["ok"] = True
+        report["message"] = (
+            "کلید خصوصی با گواهی مطابقت دارد. گواهی معتبر است و "
+            f"{(not_after - now).days} روز تا انقضا باقی مانده است."
+        )
+        return report
+
+
+def _keys_match(certificate, private_key) -> bool:
+    """The certificate's public numbers against the private key's — the whole check.
+
+    Comparing ``RSAPublicNumbers`` compares the modulus and the exponent, which
+    is what "these are a pair" means for RSA. Signing a probe and verifying it
+    would prove the same thing more slowly.
+    """
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    certificate_key = certificate.public_key()
+    if not isinstance(certificate_key, rsa.RSAPublicKey):
+        return False
+    return certificate_key.public_numbers() == private_key.public_key().public_numbers()
+
+
+def _certificate_summary(certificate) -> dict[str, object]:
+    """What the panel shows about a certificate. No key bytes, by construction."""
+    import hashlib
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.x509.oid import NameOID
+
+    public_der = certificate.public_key().public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    # A truncated digest of the *public* key. Public by definition, and short
+    # enough to read aloud when checking that what is deployed is what the CA
+    # issued — which is the operator task this actually supports.
+    digest = hashlib.sha256(public_der).hexdigest()[:32]
+    national_id = certificate.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)
+    return {
+        "subject": certificate.subject.rfc4514_string(),
+        "issuer": certificate.issuer.rfc4514_string(),
+        "serialNumber": format(certificate.serial_number, "x"),
+        "notBefore": certificate.not_valid_before_utc.isoformat(),
+        "notAfter": certificate.not_valid_after_utc.isoformat(),
+        # شناسه ملی. The organization checks this against the fiscal memory's
+        # send-permission, so it is the field an operator most often needs to read.
+        "nationalId": national_id[0].value if national_id else None,
+        "keySize": certificate.public_key().key_size,
+        "publicKeyFingerprint": ":".join(digest[i : i + 4] for i in range(0, len(digest), 4)),
+    }
+
+
+def _persian_key_error(exc: Exception, path: Path) -> str:
+    """Name the specific fix. "could not parse private key" names none of them."""
+    text = str(exc)
+    if "Password was not given" in text:
+        return (
+            f"کلید خصوصی ({path}) رمزگذاری‌شده است و گذرواژه‌ای برای آن تنظیم نشده. "
+            "مقدار MOADIAN_KEY_PASSPHRASE را در فایل .env سرور قرار دهید و سرویس را "
+            "دوباره راه‌اندازی کنید."
+        )
+    if "Incorrect password" in text or "Bad decrypt" in text:
+        return (
+            f"گذرواژه‌ی MOADIAN_KEY_PASSPHRASE کلید خصوصی ({path}) را باز نکرد. "
+            "همان گذرواژه‌ای لازم است که هنگام ساخت یا استخراج کلید تعیین شده."
+        )
+    return f"کلید خصوصی ({path}) خوانده یا تفسیر نشد: {text}"
+
+
+def _persian_material_error(exc: ConfigurationError) -> str:
+    """:meth:`SigningMaterial.require` speaks English to the log; the panel does not."""
+    text = str(exc)
+    if "no certificate configured" in text:
+        return (
+            "مسیر گواهی امضا تنظیم نشده است. MOADIAN_CERTIFICATE_PATH را در فایل .env "
+            "سرور مقدار دهید."
+        )
+    if "no private key configured" in text:
+        return (
+            "مسیر کلید خصوصی تنظیم نشده است. MOADIAN_PRIVATE_KEY_PATH را در فایل .env "
+            "سرور مقدار دهید."
+        )
+    return f"فایل تنظیم‌شده در دسترس نیست: {text}"
+
 
 def _status(path: Path | None, *, expect_private: bool = False) -> MaterialStatus:
     if path is None:

@@ -17,6 +17,7 @@ Design notes worth stating once:
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -53,6 +54,8 @@ from .deps import (
 )
 
 __all__ = ["create_app"]
+
+_log = logging.getLogger(__name__)
 
 # Applied to every route rather than repeated inline: this API signs and submits
 # tax invoices, so "authenticated by default" has to be the shape of the file.
@@ -126,6 +129,46 @@ def _client_for(profile: Profile, settings: Settings) -> MoadianClient:
     return MoadianClient.from_profile(profile, settings=settings)
 
 
+def _report_signing_material(settings: Settings) -> None:
+    """Check every configured certificate/key pair once, at startup, and log it.
+
+    The same check the admin panel runs, at the one moment nobody is watching the
+    panel. A mismatched pair signs cleanly and is rejected by the organization,
+    so the failure otherwise surfaces on a real submission with a serial already
+    spent. Logged rather than raised: a broken sandbox pair must not stop a
+    server whose production pair is fine, and the operator may be starting the
+    application precisely in order to fix it.
+
+    Distinct pairs only. Both environments fall back to the same
+    MOADIAN_CERTIFICATE_PATH by default, and one warning about one file is the
+    honest count.
+    """
+    seen: set[tuple[str | None, str | None]] = set()
+    for environment in Environment:
+        material = settings.signing_material(environment)
+        key = (
+            str(material.certificate_path) if material.certificate_path else None,
+            str(material.private_key_path) if material.private_key_path else None,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        report = material.verify()
+        if report["ok"]:
+            _log.info("signing material for %s: %s", environment, report["message"])
+        elif report["matches"] is False:
+            # The one failure that is silent everywhere else.
+            _log.error(
+                "signing material for %s: the private key does not match the "
+                "certificate (%s vs %s). Invoices will be signed and rejected.",
+                environment,
+                key[0],
+                key[1],
+            )
+        else:
+            _log.warning("signing material for %s: %s", environment, report["message"])
+
+
 def _pipeline_for(
     profile: Profile, client: MoadianClient, settings: Settings, engine: RuleEngine
 ) -> InvoicePipeline:
@@ -161,6 +204,7 @@ def create_app(
     # file. Hand the loaded values to the modules that need them instead.
     configure_auth(settings)
     set_key_passphrase(settings.key_passphrase)
+    _report_signing_material(settings)
     app.state.users = users or UserStore(Path(settings.instance_dir) / "users.sqlite")
     seed_users(app.state.users)
 
@@ -330,6 +374,22 @@ def create_app(
         """
         return [settings.signing_material(env).describe() for env in Environment]
 
+    @app.get("/api/signing-material/verify", tags=["admin"], dependencies=ADMIN_ONLY)
+    def verify_signing_material(settings: Annotated[Settings, Depends(get_settings)]):
+        """Does each environment's private key actually belong to its certificate?
+
+        The check `/api/signing-material` cannot make: it reads both files, pulls
+        the public key out of the certificate, and compares it with the public
+        half of the private key. A mismatch is invisible until the organization
+        rejects a signature — by which point a serial has been spent on an
+        invoice that will never register.
+
+        A GET because it changes nothing and the UI runs it on load as well as
+        on the button. No key material is in the response; see
+        :meth:`SigningMaterial.verify`.
+        """
+        return [settings.signing_material(env).verify() for env in Environment]
+
     @app.delete("/api/profiles/{name}", status_code=204, tags=["admin"], dependencies=ADMIN_ONLY)
     def delete_profile(name: str, store: Annotated[ProfileStore, Depends(get_profile_store)]):
         store.delete(name)
@@ -373,85 +433,68 @@ def create_app(
         return result
 
     # -- reference data ---------------------------------------------------
+    #
+    # Not under /api/profiles/{name}. A خریدار is identified by a nationally
+    # issued شناسه ملی and a کالا/خدمت by a nationally issued شناسه کالا/خدمت;
+    # neither changes meaning between sandbox and production, so scoping them to
+    # a fiscal memory only forced the same address book to be typed twice — and,
+    # worse, put both catalogues behind a شناسه یکتای حافظه مالیاتی that a new
+    # taxpayer does not have yet. Building them up is exactly what there is to do
+    # while waiting for one.
 
-    @app.get("/api/profiles/{name}/buyers", tags=["reference"], dependencies=AUTHENTICATED)
-    def list_buyers(
-        profile: ActiveProfile,
-        store: Annotated[RecordStore, Depends(get_record_store)],
-    ):
-        return store.list_buyers(profile.name)
+    @app.get("/api/buyers", tags=["reference"], dependencies=AUTHENTICATED)
+    def list_buyers(store: Annotated[RecordStore, Depends(get_record_store)]):
+        return store.list_buyers()
 
-    @app.post(
-        "/api/profiles/{name}/buyers",
-        status_code=201,
-        tags=["reference"],
-        dependencies=AUTHENTICATED,
-    )
+    @app.post("/api/buyers", status_code=201, tags=["reference"], dependencies=AUTHENTICATED)
     def add_buyer(
-        profile: ActiveProfile,
         body: BuyerIn,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
-        return store.add_buyer(profile.name, Buyer(**body.model_dump()))
+        return store.add_buyer(Buyer(**body.model_dump()))
 
     @app.delete(
-        "/api/profiles/{name}/buyers/{buyer_id}",
+        "/api/buyers/{buyer_id}",
         status_code=204,
         tags=["reference"],
         dependencies=AUTHENTICATED,
     )
     def delete_buyer(
-        profile: ActiveProfile,
         buyer_id: int,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
-        store.delete_buyer(profile.name, buyer_id)
+        store.delete_buyer(buyer_id)
 
-    @app.get("/api/profiles/{name}/goods", tags=["reference"], dependencies=AUTHENTICATED)
-    def list_goods(
-        profile: ActiveProfile,
-        store: Annotated[RecordStore, Depends(get_record_store)],
-    ):
-        return store.list_goods(profile.name)
+    @app.get("/api/goods", tags=["reference"], dependencies=AUTHENTICATED)
+    def list_goods(store: Annotated[RecordStore, Depends(get_record_store)]):
+        return store.list_goods()
 
-    @app.post(
-        "/api/profiles/{name}/goods",
-        status_code=201,
-        tags=["reference"],
-        dependencies=AUTHENTICATED,
-    )
+    @app.post("/api/goods", status_code=201, tags=["reference"], dependencies=AUTHENTICATED)
     def add_goods(
-        profile: ActiveProfile,
         body: GoodsIn,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
-        return store.add_goods(profile.name, GoodsService(**body.model_dump()))
+        return store.add_goods(GoodsService(**body.model_dump()))
 
-    @app.post(
-        "/api/profiles/{name}/goods/{goods_id}/default",
-        tags=["reference"],
-        dependencies=AUTHENTICATED,
-    )
+    @app.post("/api/goods/{goods_id}/default", tags=["reference"], dependencies=AUTHENTICATED)
     def make_default(
-        profile: ActiveProfile,
         goods_id: int,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
-        store.set_default_goods(profile.name, goods_id)
+        store.set_default_goods(goods_id)
         return {"ok": True}
 
     @app.delete(
-        "/api/profiles/{name}/goods/{goods_id}",
+        "/api/goods/{goods_id}",
         status_code=204,
         tags=["reference"],
         dependencies=AUTHENTICATED,
     )
     def delete_goods(
-        profile: ActiveProfile,
         goods_id: int,
         store: Annotated[RecordStore, Depends(get_record_store)],
     ):
-        store.delete_goods(profile.name, goods_id)
+        store.delete_goods(goods_id)
 
     # -- invoices ---------------------------------------------------------
 

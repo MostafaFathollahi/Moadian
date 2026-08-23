@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import adminGuide from '../../../../docs/ADMIN_GUIDE.md?raw'
-import userGuide from '../../../../docs/USER_GUIDE.md?raw'
+import adminGuide from '../../../../Docs/ADMIN_GUIDE.md?raw'
+import userGuide from '../../../../Docs/USER_GUIDE.md?raw'
 import { Markdown } from '../../lib/markdown'
 
-/** The guides, bundled from the same Markdown files that live in docs/.
+/** The guides, bundled from the same Markdown files that live in Docs/.
  *
  * One source rather than two: a manual that drifts from the one on disk is
  * worse than no manual, because the reader cannot tell which is current.

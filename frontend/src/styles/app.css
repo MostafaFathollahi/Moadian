@@ -1,11 +1,35 @@
 /* RTL-first, Persian-first. Light and dark both defined, because an operator
-   filing invoices at 2am should not be flashbanged. */
+   filing invoices at 2am should not be flashbanged.
+
+   Three states, not two. `data-theme` on <html> is an explicit choice; its
+   absence means "follow the system", which is the default. So every token is
+   declared three times over:
+
+     :root                                   the light palette, always defined
+     @media (prefers-color-scheme: dark)     dark, unless light was chosen
+     :root[data-theme='dark']                dark, chosen outright
+
+   Defining a colour only inside the media query would leave it undefined for a
+   viewer who picks dark on a light system, which is how half-themed pages
+   happen. See lib/theme.ts for the side that writes the attribute. */
 
 :root {
+  /* Tells the browser which way to render everything we do NOT paint: form
+     controls, scrollbars, the caret, spin buttons. Without it a dark page keeps
+     white input backgrounds, and `color: inherit` then puts near-white text on
+     them — which is precisely what made the invoice line amounts unreadable. */
+  color-scheme: light;
+
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #f0f2f5;
+  --field-bg: #ffffff;
   --border: #d9dde3;
+  /* Deliberately darker than --border. A card outline is decoration and may be
+     faint; the edge of something you type into is a UI component boundary, and
+     WCAG 1.4.11 asks 3:1 of it. One token cannot be both without every card in
+     the app shouting, so there are two. */
+  --field-border: #8d95a1;
   --text: #1a1d21;
   --muted: #5c6570;
   --accent: #1f6feb;
@@ -22,12 +46,20 @@
   --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 12px rgb(0 0 0 / 4%);
 }
 
+/* Following the system, unless the operator explicitly asked for light. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
     --bg: #0f1115;
     --surface: #171a1f;
     --surface-2: #1e222a;
+    /* Below --surface, so an input reads as a hole punched into the card rather
+       than a panel laid on it. The step is small — the border is what actually
+       marks the edge. */
+    --field-bg: #101317;
     --border: #2c313a;
+    --field-border: #5b6579;
     --text: #e7eaee;
     --muted: #99a2ad;
     --accent: #4c8dff;
@@ -42,6 +74,33 @@
     --prod-soft: #33200f;
     --shadow: none;
   }
+}
+
+/* Chosen outright, whatever the system says. Same values; duplicated rather
+   than shared because a selector list would make the media query apply to the
+   explicit case too, and then "light" could not win on a dark system. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0f1115;
+  --surface: #171a1f;
+  --surface-2: #1e222a;
+  --field-bg: #101317;
+  --border: #2c313a;
+  --field-border: #5b6579;
+  --text: #e7eaee;
+  --muted: #99a2ad;
+  --accent: #4c8dff;
+  --accent-soft: #16233a;
+  --ok: #4ac26b;
+  --ok-soft: #122919;
+  --warn: #d4a72c;
+  --warn-soft: #2b2410;
+  --danger: #ff6b5e;
+  --danger-soft: #331614;
+  --prod: #ff9f6b;
+  --prod-soft: #33200f;
+  --shadow: none;
 }
 
 * { box-sizing: border-box; }
@@ -139,6 +198,41 @@ button, select, input, textarea {
   font: inherit; color: inherit;
 }
 
+/* Themed here rather than only under .field. The invoice line table lays its
+   inputs straight into <td>, so a rule scoped to .field left them with the
+   browser's own light background while `color: inherit` painted near-white text
+   on it — invisible in dark mode, which is where the amounts became unreadable.
+   Anything an operator types into is styled by being an input, not by where it
+   happens to sit. */
+input, select, textarea {
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  color: var(--text);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+input:disabled, select:disabled, textarea:disabled {
+  background: var(--surface-2); color: var(--muted); cursor: not-allowed;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+/* Amounts are read far more often than they are typed, and a spinner steals
+   width from the digits. The keyboard still works; only the arrows go. */
+input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Money and quantities, wherever they are entered. Tabular figures keep the
+   columns of the line table aligned as the numbers change. */
+td input[type='number'], .numeric input, .field input[type='number'] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
 .btn {
   border: 1px solid var(--border); background: var(--surface);
   border-radius: 8px; padding: 7px 14px; cursor: pointer;
@@ -153,11 +247,7 @@ button, select, input, textarea {
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .field label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-.field input, .field select, .field textarea {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 7px 10px; width: 100%;
-}
-.field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.field input, .field select, .field textarea { width: 100%; padding: 7px 10px; }
 .field.invalid input, .field.invalid select { border-color: var(--danger); }
 .field .hint { font-size: 11px; color: var(--muted); }
 .field .err { font-size: 11px; color: var(--danger); }
@@ -195,8 +285,7 @@ td.numeric, th.numeric { text-align: end; font-variant-numeric: tabular-nums; }
 }
 
 .env-switch { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.env-switch select { width: 100%; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--surface); }
+.env-switch select { width: 100%; padding: 8px 10px; }
 .env-switch.is-production select { border-color: var(--prod); color: var(--prod); font-weight: 600; }
 
 /* ---------------------------------------------------------------- messages */
@@ -234,8 +323,9 @@ td.numeric, th.numeric { text-align: end; font-variant-numeric: tabular-nums; }
 
 .login-page {
   min-height: 100vh; display: grid; place-items: center; padding: 24px;
-  background: var(--bg);
+  background: var(--bg); position: relative;
 }
+.login-theme { position: absolute; top: 18px; inset-inline-end: 18px; width: 210px; }
 .login-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 28px; width: min(380px, 100%);
@@ -247,6 +337,28 @@ td.numeric, th.numeric { text-align: end; font-variant-numeric: tabular-nums; }
 }
 
 .sidebar-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 6px; }
+
+/* ---------------------------------------------------------------- theme */
+
+.theme-switch {
+  display: flex; gap: 2px; padding: 3px; margin: 4px 0 6px;
+  background: var(--surface-2); border-radius: 8px;
+}
+.theme-switch button {
+  flex: 1; border: 0; background: transparent; color: var(--muted);
+  border-radius: 6px; padding: 5px 4px; font-size: 11.5px; cursor: pointer;
+}
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed='true'] {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: var(--shadow);
+}
+/* The sidebar turns into a horizontal strip on narrow screens; the switch
+   should not then stretch across it. */
+@media (max-width: 820px) {
+  .theme-switch { margin: 0 6px; }
+  .theme-switch button { flex: none; padding: 5px 8px; }
+}
 
 /* ---------------------------------------------------------------- markdown */
 

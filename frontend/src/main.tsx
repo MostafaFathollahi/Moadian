@@ -7,7 +7,11 @@ import { createRoot } from 'react-dom/client'
 // Variable weight — one file covers 100..900, so the weights below cost nothing.
 import '@fontsource-variable/vazirmatn'
 import { App } from './App'
+import { initTheme } from './lib/theme'
 import './styles/app.css'
+
+// Before the first render, so a dark-theme operator never sees a white flash.
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

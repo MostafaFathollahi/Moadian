@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,17 +15,54 @@ from cryptography.x509.oid import NameOID
 
 from moadian.errors import CertificateError
 
-__all__ = ["SigningCredentials"]
+__all__ = ["SigningCredentials", "load_certificate"]
 
 
-def _load_certificate(data: bytes) -> x509.Certificate:
-    """Accept PEM or DER — Iranian CAs hand out both, often with a ``.crt`` name."""
+def load_certificate(data: bytes) -> x509.Certificate:
+    """Accept PEM, DER, or bare base64 — all three arrive named ``.crt``.
+
+    The third is not a hypothetical. مرکز توسعه تجارت الکترونیکی delivers the
+    issued certificate as the base64 body with no ``-----BEGIN CERTIFICATE-----``
+    armour around it, which is a valid thing to paste into a form and an invalid
+    thing to hand to a PEM parser. Rejecting it would mean telling an operator
+    their real, correctly issued certificate is corrupt, and the fix — adding two
+    lines by hand — is one they should not have to find.
+
+    Public, and the only certificate reader in the application. It was private
+    once, which is exactly how :meth:`Profile.certificate` came to call
+    ``load_pem_x509_certificate`` directly and reject a certificate the signing
+    path had already accepted — the panel said the pair matched while the
+    dashboard said the file was unreadable, about the same file.
+    """
     try:
         if b"-----BEGIN" in data:
             return x509.load_pem_x509_certificate(data)
         return x509.load_der_x509_certificate(data)
-    except ValueError as exc:
-        raise CertificateError(f"could not parse certificate: {exc}") from exc
+    except ValueError as der_error:
+        armoured = _armour(data)
+        if armoured is None:
+            raise CertificateError(f"could not parse certificate: {der_error}") from der_error
+        try:
+            return x509.load_pem_x509_certificate(armoured)
+        except ValueError as exc:
+            raise CertificateError(f"could not parse certificate: {exc}") from exc
+
+
+def _armour(data: bytes) -> bytes | None:
+    """Wrap a bare base64 body in PEM armour, or ``None`` if it is not base64.
+
+    Whitespace-insensitive, so the CRLF line endings these files arrive with are
+    not a second failure mode.
+    """
+    body = b"".join(data.split())
+    if not body:
+        return None
+    try:
+        base64.b64decode(body, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    lines = [body[i : i + 64] for i in range(0, len(body), 64)]
+    return b"-----BEGIN CERTIFICATE-----\n" + b"\n".join(lines) + b"\n-----END CERTIFICATE-----\n"
 
 
 def _load_private_key(data: bytes, password: bytes | None) -> rsa.RSAPrivateKey:
@@ -67,7 +106,7 @@ class SigningCredentials:
     ) -> SigningCredentials:
         """Load from in-memory certificate and private-key bytes."""
         return cls(
-            certificate=_load_certificate(cert_pem),
+            certificate=load_certificate(cert_pem),
             private_key=_load_private_key(key_pem, key_password),
         )
 

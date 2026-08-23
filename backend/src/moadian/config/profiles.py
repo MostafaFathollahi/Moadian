@@ -27,7 +27,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from moadian.config.environment import Environment
-from moadian.errors import ConfigurationError
+from moadian.errors import CertificateError, ConfigurationError
 
 if TYPE_CHECKING:  # avoids import cycles at module scope
     from moadian.config.settings import Settings
@@ -117,13 +117,19 @@ class Profile:
         method here; only :meth:`load_credentials` touches it, and it returns a
         signing object rather than bytes.
         """
+        from moadian.crypto import load_certificate
+
         material = settings.signing_material(self.environment)
         certificate_path, _ = material.require()
         try:
-            return x509.load_pem_x509_certificate(certificate_path.read_bytes())
-        except (OSError, ValueError) as exc:
+            # Through the shared reader, which takes PEM, DER and the bare
+            # base64 the Iranian CA actually ships. Calling the PEM parser
+            # directly here meant the same file was readable to the signing path
+            # and unreadable to the dashboard.
+            return load_certificate(certificate_path.read_bytes())
+        except (OSError, ValueError, CertificateError) as exc:
             raise ConfigurationError(
-                f"the certificate at {certificate_path} is not readable PEM"
+                f"the certificate at {certificate_path} could not be read: {exc}"
             ) from exc
 
     def redacted(self, settings: Settings | None = None) -> dict[str, Any]:

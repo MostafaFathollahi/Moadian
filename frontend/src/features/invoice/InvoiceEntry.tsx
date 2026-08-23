@@ -43,12 +43,12 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
     void api.patterns().then(setPatterns).catch(() => undefined)
   }, [])
 
+  // Both catalogues are shared across fiscal memories, so this does not depend
+  // on the selected profile and does not reload when it changes.
   useEffect(() => {
-    setBuyers([])
-    setGoods([])
-    void api.buyers(profile.name).then(setBuyers).catch(() => undefined)
-    void api.goods(profile.name).then(setGoods).catch(() => undefined)
-  }, [profile.name])
+    void api.buyers().then(setBuyers).catch(() => undefined)
+    void api.goods().then(setGoods).catch(() => undefined)
+  }, [])
 
   // Requiredness comes from جدول ۱ via the API, never from hard-coded rules
   // here — a correction to the matrix changes this form with no release.

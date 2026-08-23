@@ -13,6 +13,7 @@ between the two would be hard to see.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -179,3 +180,50 @@ def sandbox_base_url() -> str:
     return os.environ.get(
         "MOADIAN_SANDBOX_BASE_URL", "https://sandboxrc.tax.gov.ir/requestsmanager"
     )
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _run_outside_the_repo(tmp_path_factory) -> Iterator[None]:
+    """Stop the developer's own ``backend/.env`` from reaching the suite.
+
+    ``Settings`` reads ``.env`` from the working directory by design — that is
+    how a deployment is configured — and pytest runs from the directory that
+    holds one. So a test building ``Settings(instance_dir=tmp_path)`` and meaning
+    "a server with no certificate configured" silently got the real certificate
+    of whoever ran it, and two tests passed or failed depending on the contents
+    of an untracked file.
+
+    The fix is to move the working directory rather than to disable ``env_file``:
+    one test writes its own ``.env`` and chdirs to it precisely to prove that the
+    file *is* read, and that test has to keep working. Every path the suite cares
+    about is either absolute or package-relative.
+
+    Moving is necessary but not sufficient, because importing
+    :mod:`moadian.api.app` builds an application at module scope — and collection
+    happens before any fixture. By the time this runs, that application has
+    already cached a ``Settings`` read from the developer's real ``.env`` and
+    pushed its ``MOADIAN_KEY_PASSPHRASE`` into module state in
+    :mod:`moadian.config.keyring`. Both have to be undone, not merely pre-empted:
+    a leaked passphrase makes every unencrypted test key fail to load with
+    "Password was given but private key is not encrypted", and the suite's result
+    then depends on whether whoever ran it happens to hold an encrypted key.
+    """
+    from moadian.api import deps
+    from moadian.config import keyring
+
+    original = Path.cwd()
+    original_passphrase = keyring._CONFIGURED_PASSPHRASE
+    # The exported variable is the other half of the same door: keyring falls
+    # back to it when nothing was configured.
+    exported = os.environ.pop(keyring.KEY_PASSPHRASE_ENV, None)
+    os.chdir(tmp_path_factory.mktemp("cwd"))
+    keyring.set_passphrase(None)
+    for cached in (deps.get_settings, deps.get_profile_store, deps.get_record_store):
+        cached.cache_clear()
+    try:
+        yield
+    finally:
+        os.chdir(original)
+        keyring.set_passphrase(original_passphrase)
+        if exported is not None:
+            os.environ[keyring.KEY_PASSPHRASE_ENV] = exported

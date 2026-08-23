@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Served from public/, so it is a real file at /favicon.svg rather than a
+         hashed asset a browser would not look for. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Paints the browser chrome to match the app on mobile and on the
+         installed-PWA-ish surfaces that honour it. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1115" />
     <title>سامانه مودیان — صدور صورتحساب الکترونیکی</title>
   </head>
   <body>

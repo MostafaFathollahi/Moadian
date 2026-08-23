@@ -1,12 +1,20 @@
 """SQLite storage for the things an operator maintains between invoices.
 
-Three tables, all scoped to a profile because a شناسه یکتای حافظه مالیاتی belongs
-to exactly one environment: a buyer or a goods code entered while pointed at the
-sandbox must not silently appear on a production invoice.
+**Buyers and goods are not scoped to a profile; invoices are.** They were, once,
+on the reasoning that a buyer entered against sandbox should not appear on a
+production invoice. That reasoning does not survive contact with the objects: a
+شناسه ملی and a شناسه کالا/خدمت are issued nationally and mean the same thing in
+both environments, so scoping them bought no safety and cost the operator two
+address books to keep in step. Worse, it made both catalogues unreachable until
+a شناسه یکتای حافظه مالیاتی had been obtained — which is precisely the waiting
+period during which you want to be entering your customers and your goods codes.
+Invoices stay profile-scoped, because *those* really do belong to one memory.
 
 Deliberately not an ORM. The schema is four tables wide and the queries are all
-"give me the rows for this profile"; SQLAlchemy would be more machinery than the
-problem has.
+"give me the rows"; SQLAlchemy would be more machinery than the problem has.
+
+One connection, and *every* statement takes the lock — reads included. See
+:meth:`RecordStore._read`.
 """
 
 from __future__ import annotations
@@ -25,12 +33,13 @@ from moadian.errors import ConfigurationError
 
 __all__ = ["Buyer", "GoodsService", "InvoiceRecord", "RecordStore", "InvoiceState"]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS buyers (
+#: Split out so :meth:`RecordStore._migrate` can rebuild one table at a time.
+#: ``executescript`` commits any open transaction, so the migration must not
+#: use it — it issues these one statement at a time instead.
+_BUYERS_TABLE = """CREATE TABLE IF NOT EXISTS buyers (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    profile       TEXT NOT NULL,
     name          TEXT NOT NULL,
     -- شناسه ملی / شماره ملی / شناسه مشارکت مدنی / کد فراگیر. Text, never integer:
     -- these carry leading zeros that an integer column would eat.
@@ -42,12 +51,12 @@ CREATE TABLE IF NOT EXISTS buyers (
     branch_code   TEXT,
     note          TEXT,
     created_at    TEXT NOT NULL,
-    UNIQUE (profile, national_id)
+    UNIQUE (national_id)
 );
+"""
 
-CREATE TABLE IF NOT EXISTS goods (
+_GOODS_TABLE = """CREATE TABLE IF NOT EXISTS goods (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    profile      TEXT NOT NULL,
     -- شناسه کالا/خدمت (sstid), issued by the organization.
     stuff_id     TEXT NOT NULL,
     description  TEXT NOT NULL,
@@ -58,10 +67,11 @@ CREATE TABLE IF NOT EXISTS goods (
     default_fee  REAL,
     is_default   INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL,
-    UNIQUE (profile, stuff_id)
+    UNIQUE (stuff_id)
 );
+"""
 
-CREATE TABLE IF NOT EXISTS invoices (
+_REST = """CREATE TABLE IF NOT EXISTS invoices (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     profile        TEXT NOT NULL,
     state          TEXT NOT NULL,
@@ -83,6 +93,8 @@ CREATE INDEX IF NOT EXISTS invoices_reference ON invoices (reference_number);
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+
+_SCHEMA = _BUYERS_TABLE + _GOODS_TABLE + _REST
 
 
 class InvoiceState:
@@ -177,7 +189,7 @@ def _now() -> str:
 
 
 class RecordStore:
-    """Buyers, goods and invoice records for every profile."""
+    """The shared buyer and goods catalogues, plus invoice records per profile."""
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -185,21 +197,91 @@ class RecordStore:
         # One connection guarded by a lock rather than a pool: SQLite writes
         # serialise anyway, and a single-writer story is far easier to reason
         # about than connection-per-request with WAL contention.
-        self._lock = threading.Lock()
+        # Reentrant: _migrate reads (via _columns) while holding a write.
+        self._lock = threading.RLock()
         self._connection = sqlite3.connect(str(self.path), check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA foreign_keys=ON")
+        # Before the schema script, which is CREATE IF NOT EXISTS throughout and
+        # so would leave a v1 table exactly as it found it.
+        self._migrate()
         with self._write() as cursor:
             cursor.executescript(_SCHEMA)
             cursor.execute(
-                "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+
+    # -- migration --------------------------------------------------------
+
+    def _columns(self, table: str) -> set[str]:
+        """Column names of ``table``, empty if it does not exist."""
+        with self._read() as cursor:
+            rows = cursor.execute(f"PRAGMA table_info({table})").fetchall()
+        return {row["name"] for row in rows}
+
+    def _migrate(self) -> None:
+        """v1 → v2: buyers and goods lose their ``profile`` column.
+
+        Rows entered under different profiles collapse onto the identifier that
+        was always the real key — the شناسه ملی for a buyer, the شناسه کالا/خدمت
+        for a goods entry. Where two profiles held the same identifier the older
+        row wins and the newer is dropped; they describe the same nationally
+        issued thing, so there is nothing in the duplicate to preserve.
+
+        Nothing is deleted that is not first copied, and the whole thing runs in
+        one transaction: an interrupted upgrade leaves v1 intact.
+        """
+        with self._write() as cursor:
+            if "profile" in self._columns("buyers"):
+                cursor.execute("ALTER TABLE buyers RENAME TO buyers_v1")
+                cursor.execute(_BUYERS_TABLE)
+                cursor.execute(
+                    "INSERT INTO buyers (name, national_id, economic_code, person_type, "
+                    "postal_code, branch_code, note, created_at) "
+                    "SELECT name, national_id, economic_code, person_type, postal_code, "
+                    "branch_code, note, created_at FROM buyers_v1 "
+                    "WHERE id IN (SELECT MIN(id) FROM buyers_v1 GROUP BY national_id)"
+                )
+                cursor.execute("DROP TABLE buyers_v1")
+
+            if "profile" in self._columns("goods"):
+                cursor.execute("ALTER TABLE goods RENAME TO goods_v1")
+                cursor.execute(_GOODS_TABLE)
+                cursor.execute(
+                    "INSERT INTO goods (stuff_id, description, unit, vat_rate, default_fee, "
+                    "is_default, created_at) "
+                    "SELECT stuff_id, description, unit, vat_rate, default_fee, is_default, "
+                    "created_at FROM goods_v1 "
+                    "WHERE id IN (SELECT MIN(id) FROM goods_v1 GROUP BY stuff_id)"
+                )
+                cursor.execute("DROP TABLE goods_v1")
+                # One default per profile becomes several once the profiles
+                # merge, and the invoice form has one first line to pre-fill.
+                cursor.execute(
+                    "UPDATE goods SET is_default = 0 WHERE id NOT IN "
+                    "(SELECT MIN(id) FROM goods WHERE is_default = 1)"
+                )
 
     @contextmanager
     def _write(self) -> Iterator[sqlite3.Cursor]:
         with self._lock, self._connection:
+            yield self._connection.cursor()
+
+    @contextmanager
+    def _read(self) -> Iterator[sqlite3.Cursor]:
+        """A read, holding the same lock the writes do.
+
+        Not belt-and-braces. A :class:`sqlite3.Connection` caches prepared
+        statements, so two threads running identical SQL share one
+        ``sqlite3_stmt`` and rebind it under each other; the loser gets an empty
+        result for rows that exist. FastAPI serves sync endpoints from a
+        threadpool, so this is reachable from any two concurrent requests — it
+        cost :mod:`moadian.auth.store` a random 401 on about one call in twenty,
+        and nothing about the mechanism was specific to that table.
+        """
+        with self._lock:
             yield self._connection.cursor()
 
     def close(self) -> None:
@@ -207,23 +289,21 @@ class RecordStore:
 
     # -- buyers -----------------------------------------------------------
 
-    def list_buyers(self, profile: str) -> list[Buyer]:
-        rows = self._connection.execute(
-            "SELECT * FROM buyers WHERE profile = ? ORDER BY name", (profile,)
-        ).fetchall()
+    def list_buyers(self) -> list[Buyer]:
+        with self._read() as cursor:
+            rows = cursor.execute("SELECT * FROM buyers ORDER BY name").fetchall()
         return [self._buyer(row) for row in rows]
 
-    def add_buyer(self, profile: str, buyer: Buyer) -> Buyer:
+    def add_buyer(self, buyer: Buyer) -> Buyer:
         buyer.validate()
         created = _now()
         try:
             with self._write() as cursor:
                 cursor.execute(
-                    "INSERT INTO buyers (profile, name, national_id, economic_code, "
+                    "INSERT INTO buyers (name, national_id, economic_code, "
                     "person_type, postal_code, branch_code, note, created_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?)",
                     (
-                        profile,
                         buyer.name,
                         buyer.national_id,
                         buyer.economic_code,
@@ -237,16 +317,16 @@ class RecordStore:
                 buyer.id = cursor.lastrowid
         except sqlite3.IntegrityError as exc:
             raise ConfigurationError(
-                f"a buyer with national id {buyer.national_id} already exists in this profile"
+                f"خریداری با شناسه ملی {buyer.national_id} از پیش ثبت شده است"
             ) from exc
         buyer.created_at = created
         return buyer
 
-    def delete_buyer(self, profile: str, buyer_id: int) -> None:
+    def delete_buyer(self, buyer_id: int) -> None:
         with self._write() as cursor:
-            cursor.execute("DELETE FROM buyers WHERE profile = ? AND id = ?", (profile, buyer_id))
+            cursor.execute("DELETE FROM buyers WHERE id = ?", (buyer_id,))
             if cursor.rowcount == 0:
-                raise ConfigurationError(f"no buyer {buyer_id} in profile {profile!r}")
+                raise ConfigurationError(f"no buyer {buyer_id}")
 
     @staticmethod
     def _buyer(row: sqlite3.Row) -> Buyer:
@@ -264,26 +344,25 @@ class RecordStore:
 
     # -- goods ------------------------------------------------------------
 
-    def list_goods(self, profile: str) -> list[GoodsService]:
-        rows = self._connection.execute(
-            "SELECT * FROM goods WHERE profile = ? ORDER BY is_default DESC, description",
-            (profile,),
-        ).fetchall()
+    def list_goods(self) -> list[GoodsService]:
+        with self._read() as cursor:
+            rows = cursor.execute(
+                "SELECT * FROM goods ORDER BY is_default DESC, description"
+            ).fetchall()
         return [self._goods(row) for row in rows]
 
-    def add_goods(self, profile: str, item: GoodsService) -> GoodsService:
+    def add_goods(self, item: GoodsService) -> GoodsService:
         item.validate()
         created = _now()
         try:
             with self._write() as cursor:
                 if item.is_default:
-                    # At most one default per profile, so the form has one answer.
-                    cursor.execute("UPDATE goods SET is_default = 0 WHERE profile = ?", (profile,))
+                    # At most one default, so the invoice form has one answer.
+                    cursor.execute("UPDATE goods SET is_default = 0")
                 cursor.execute(
-                    "INSERT INTO goods (profile, stuff_id, description, unit, vat_rate, "
-                    "default_fee, is_default, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO goods (stuff_id, description, unit, vat_rate, "
+                    "default_fee, is_default, created_at) VALUES (?,?,?,?,?,?,?)",
                     (
-                        profile,
                         item.stuff_id,
                         item.description,
                         item.unit,
@@ -295,27 +374,22 @@ class RecordStore:
                 )
                 item.id = cursor.lastrowid
         except sqlite3.IntegrityError as exc:
-            raise ConfigurationError(
-                f"شناسه کالا/خدمت {item.stuff_id} already exists in this profile"
-            ) from exc
+            raise ConfigurationError(f"شناسه کالا/خدمت {item.stuff_id} از پیش ثبت شده است") from exc
         item.created_at = created
         return item
 
-    def set_default_goods(self, profile: str, goods_id: int) -> None:
+    def set_default_goods(self, goods_id: int) -> None:
         with self._write() as cursor:
-            cursor.execute("UPDATE goods SET is_default = 0 WHERE profile = ?", (profile,))
-            cursor.execute(
-                "UPDATE goods SET is_default = 1 WHERE profile = ? AND id = ?",
-                (profile, goods_id),
-            )
+            cursor.execute("UPDATE goods SET is_default = 0")
+            cursor.execute("UPDATE goods SET is_default = 1 WHERE id = ?", (goods_id,))
             if cursor.rowcount == 0:
-                raise ConfigurationError(f"no goods {goods_id} in profile {profile!r}")
+                raise ConfigurationError(f"no goods {goods_id}")
 
-    def delete_goods(self, profile: str, goods_id: int) -> None:
+    def delete_goods(self, goods_id: int) -> None:
         with self._write() as cursor:
-            cursor.execute("DELETE FROM goods WHERE profile = ? AND id = ?", (profile, goods_id))
+            cursor.execute("DELETE FROM goods WHERE id = ?", (goods_id,))
             if cursor.rowcount == 0:
-                raise ConfigurationError(f"no goods {goods_id} in profile {profile!r}")
+                raise ConfigurationError(f"no goods {goods_id}")
 
     @staticmethod
     def _goods(row: sqlite3.Row) -> GoodsService:
@@ -383,12 +457,14 @@ class RecordStore:
             params.append(state)
         sql += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
-        return [self._invoice(row) for row in self._connection.execute(sql, params)]
+        # Materialised inside the lock — a lazy cursor drained after release
+        # would be the unguarded access this exists to prevent.
+        with self._read() as cursor:
+            return [self._invoice(row) for row in cursor.execute(sql, params).fetchall()]
 
     def get_invoice(self, invoice_id: int) -> InvoiceRecord | None:
-        row = self._connection.execute(
-            "SELECT * FROM invoices WHERE id = ?", (invoice_id,)
-        ).fetchone()
+        with self._read() as cursor:
+            row = cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
         return self._invoice(row) if row else None
 
     def counts_by_state(self, profile: str) -> dict[str, int]:
@@ -397,10 +473,11 @@ class RecordStore:
         Omitting empty states would make the dashboard's shape depend on the
         data, which reads as a missing card rather than a count of zero.
         """
-        rows = self._connection.execute(
-            "SELECT state, COUNT(*) AS n FROM invoices WHERE profile = ? GROUP BY state",
-            (profile,),
-        ).fetchall()
+        with self._read() as cursor:
+            rows = cursor.execute(
+                "SELECT state, COUNT(*) AS n FROM invoices WHERE profile = ? GROUP BY state",
+                (profile,),
+            ).fetchall()
         counts = dict.fromkeys(InvoiceState.ALL, 0)
         for row in rows:
             counts[row["state"]] = row["n"]

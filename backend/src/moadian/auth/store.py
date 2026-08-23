@@ -1,7 +1,8 @@
 """SQLite storage for accounts.
 
 Same shape as :mod:`moadian.store.records` — one connection behind a lock, no
-ORM. Kept in its own database file from the invoice records: accounts are
+ORM. *Every* statement takes the lock, reads included; see :meth:`UserStore._read`
+for the bug that taught us why. Kept in its own database file from the invoice records: accounts are
 operational data with a different backup and retention story from tax filings,
 and mixing them makes "restore the invoices" mean "restore whoever could log in
 that day too".
@@ -55,7 +56,9 @@ class UserStore:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
+        # Reentrant: a write may need to read (see records.RecordStore._migrate),
+        # and a plain Lock would deadlock on itself there.
+        self._lock = threading.RLock()
         self._connection = sqlite3.connect(str(self.path), check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA journal_mode=WAL")
@@ -65,6 +68,33 @@ class UserStore:
     @contextmanager
     def _write(self) -> Iterator[sqlite3.Cursor]:
         with self._lock, self._connection:
+            yield self._connection.cursor()
+
+    @contextmanager
+    def _read(self) -> Iterator[sqlite3.Cursor]:
+        """A read, holding the same lock the writes do.
+
+        Reads used to go straight to ``self._connection`` unguarded, on the
+        assumption that concurrent SELECTs on one connection are harmless. They
+        are not. A :class:`sqlite3.Connection` keeps a prepared-statement cache,
+        so two threads running the *same* SQL text share one ``sqlite3_stmt``;
+        each rebinds and resets it under the other, and the loser's
+        ``fetchone()`` comes back empty for a row that plainly exists.
+
+        FastAPI runs sync endpoints in a threadpool, and every authenticated
+        request re-reads the caller through the identical
+        ``SELECT * FROM users WHERE id = ?``. So the collision landed almost
+        entirely on :meth:`get`, returning ``None`` for a live account — which
+        :func:`~moadian.auth.security.current_user` can only read as "کاربر یافت
+        نشد" and answer 401. The browser clears the session on any 401, so a user
+        was thrown back to the login screen at random, most often just after
+        switching pages, because that is when several requests go out at once.
+        Roughly one call in twenty under a five-way fan-out.
+
+        Serialising is the right size of fix here: this is a single-operator
+        application whose queries are all indexed lookups over a handful of rows.
+        """
+        with self._lock:
             yield self._connection.cursor()
 
     def close(self) -> None:
@@ -86,19 +116,20 @@ class UserStore:
         )
 
     def get(self, user_id: int) -> User | None:
-        row = self._connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        with self._read() as cursor:
+            row = cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return self._row(row) if row else None
 
     def by_username(self, username: str) -> User | None:
-        row = self._connection.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
-        ).fetchone()
+        with self._read() as cursor:
+            row = cursor.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         return self._row(row) if row else None
 
     def password_hash(self, user_id: int) -> str | None:
-        row = self._connection.execute(
-            "SELECT password_hash FROM users WHERE id = ?", (user_id,)
-        ).fetchone()
+        with self._read() as cursor:
+            row = cursor.execute(
+                "SELECT password_hash FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
         return row["password_hash"] if row else None
 
     def list(self, include_inactive: bool = True) -> list[User]:
@@ -106,7 +137,10 @@ class UserStore:
         if not include_inactive:
             sql += " WHERE is_active = 1"
         sql += " ORDER BY is_active DESC, id ASC"
-        return [self._row(row) for row in self._connection.execute(sql)]
+        # Materialised inside the lock: a lazy cursor read after release would
+        # be exactly the unguarded access this exists to prevent.
+        with self._read() as cursor:
+            return [self._row(row) for row in cursor.execute(sql).fetchall()]
 
     def active_admin_count(self, exclude_id: int | None = None) -> int:
         sql = "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1"
@@ -114,7 +148,8 @@ class UserStore:
         if exclude_id is not None:
             sql += " AND id != ?"
             params.append(exclude_id)
-        return int(self._connection.execute(sql, params).fetchone()["n"])
+        with self._read() as cursor:
+            return int(cursor.execute(sql, params).fetchone()["n"])
 
     # -- writes -----------------------------------------------------------
 
@@ -199,9 +234,12 @@ class UserStore:
             )
 
     def auth_epoch(self) -> float:
-        row = self._connection.execute(
-            "SELECT value FROM auth_settings WHERE key = 'auth_epoch'"
-        ).fetchone()
+        # Read on every authenticated request, alongside get() — so it is on the
+        # same hot path and takes the same lock.
+        with self._read() as cursor:
+            row = cursor.execute(
+                "SELECT value FROM auth_settings WHERE key = 'auth_epoch'"
+            ).fetchone()
         try:
             return float(row["value"]) if row else 0.0
         except (TypeError, ValueError):

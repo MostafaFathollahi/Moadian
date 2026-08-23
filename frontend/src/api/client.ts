@@ -9,6 +9,7 @@
 import { clearSession, getToken } from '../lib/session'
 import type {
   Buyer,
+  CertificateCheck,
   Dashboard,
   EnvironmentInfo,
   GoodsService,
@@ -146,6 +147,8 @@ export const api = {
   patternFields: (pattern: number, type: number) =>
     request<PatternFields>(`/api/patterns/${pattern}/fields?type=${type}`),
   signingMaterial: () => request<SigningMaterial[]>('/api/signing-material'),
+  verifySigningMaterial: () =>
+    request<CertificateCheck[]>('/api/signing-material/verify'),
 
   profiles: () => request<ProfileView[]>('/api/profiles'),
   createProfile: (body: {
@@ -167,27 +170,21 @@ export const api = {
 
   dashboard: (profile: string) => request<Dashboard>(`/api/profiles/${encode(profile)}/dashboard`),
 
-  buyers: (profile: string) => request<Buyer[]>(`/api/profiles/${encode(profile)}/buyers`),
-  addBuyer: (profile: string, body: Partial<Buyer>) =>
-    request<Buyer>(`/api/profiles/${encode(profile)}/buyers`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  deleteBuyer: (profile: string, id: number) =>
-    request<void>(`/api/profiles/${encode(profile)}/buyers/${id}`, { method: 'DELETE' }),
+  // Not under /api/profiles. Both catalogues are keyed on nationally issued
+  // identifiers that mean the same thing in either environment, so they are
+  // shared — and, more to the point, usable before a شناسه یکتای حافظه مالیاتی
+  // has been obtained.
+  buyers: () => request<Buyer[]>('/api/buyers'),
+  addBuyer: (body: Partial<Buyer>) =>
+    request<Buyer>('/api/buyers', { method: 'POST', body: JSON.stringify(body) }),
+  deleteBuyer: (id: number) => request<void>(`/api/buyers/${id}`, { method: 'DELETE' }),
 
-  goods: (profile: string) => request<GoodsService[]>(`/api/profiles/${encode(profile)}/goods`),
-  addGoods: (profile: string, body: Partial<GoodsService>) =>
-    request<GoodsService>(`/api/profiles/${encode(profile)}/goods`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  makeGoodsDefault: (profile: string, id: number) =>
-    request<{ ok: boolean }>(`/api/profiles/${encode(profile)}/goods/${id}/default`, {
-      method: 'POST',
-    }),
-  deleteGoods: (profile: string, id: number) =>
-    request<void>(`/api/profiles/${encode(profile)}/goods/${id}`, { method: 'DELETE' }),
+  goods: () => request<GoodsService[]>('/api/goods'),
+  addGoods: (body: Partial<GoodsService>) =>
+    request<GoodsService>('/api/goods', { method: 'POST', body: JSON.stringify(body) }),
+  makeGoodsDefault: (id: number) =>
+    request<{ ok: boolean }>(`/api/goods/${id}/default`, { method: 'POST' }),
+  deleteGoods: (id: number) => request<void>(`/api/goods/${id}`, { method: 'DELETE' }),
 
   verify: (profile: string, invoice: InvoicePayload) =>
     request<VerifyResult>(`/api/profiles/${encode(profile)}/invoices/verify`, {

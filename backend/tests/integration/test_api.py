@@ -246,44 +246,98 @@ async def test_test_connection_separates_reachability_from_authentication(
     assert body["environment"] == "sandbox"
 
 
+# ------------------------------------------------- signing material
+
+
+async def test_verify_signing_material_confirms_a_matched_pair(
+    client: httpx.AsyncClient,
+) -> None:
+    """The button in تنظیمات. The dev pair is matched, so both environments pass."""
+    body = (await client.get("/api/signing-material/verify")).json()
+    assert {entry["environment"] for entry in body} == {"sandbox", "production"}
+    assert all(entry["ok"] for entry in body)
+    assert all(entry["matches"] for entry in body)
+
+
+async def test_verify_signing_material_returns_no_key_material(
+    client: httpx.AsyncClient,
+) -> None:
+    """This response reaches a browser. Nothing private may travel in it."""
+    text = (await client.get("/api/signing-material/verify")).text
+    assert "PRIVATE" not in text
+    assert "BEGIN" not in text
+
+
+async def test_verify_signing_material_reports_a_mismatch(
+    api, client: httpx.AsyncClient, tmp_path
+) -> None:
+    """A key from a different pair: well-formed files, unusable together."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    stranger = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    (tmp_path / "keys" / "dev.pem").write_bytes(
+        stranger.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    body = (await client.get("/api/signing-material/verify")).json()
+    assert all(entry["matches"] is False for entry in body)
+    assert all("مطابقت ندارد" in entry["message"] for entry in body)
+
+
+async def test_verify_signing_material_is_admin_only(api) -> None:
+    """It names file paths on the server; an ordinary operator has no use for them."""
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=api), base_url="http://api"
+    ) as http:
+        api.state.users.create(username="operator", password="operator1234", role="user")
+        session = await http.post(
+            "/api/auth/login", json={"username": "operator", "password": "operator1234"}
+        )
+        http.headers["Authorization"] = f"Bearer {session.json()['token']}"
+        assert (await http.get("/api/signing-material/verify")).status_code == 403
+
+
 # ------------------------------------------------------------ reference data
 
 
 async def test_buyers_round_trip(client: httpx.AsyncClient) -> None:
     created = await client.post(
-        f"/api/profiles/{PROFILE}/buyers",
+        "/api/buyers",
         json={"name": "شرکت نمونه", "national_id": "10100302746", "person_type": 2},
     )
     assert created.status_code == 201
-    listing = (await client.get(f"/api/profiles/{PROFILE}/buyers")).json()
+    listing = (await client.get("/api/buyers")).json()
     assert [b["name"] for b in listing] == ["شرکت نمونه"]
     assert listing[0]["national_id"] == "10100302746"
 
-    await client.delete(f"/api/profiles/{PROFILE}/buyers/{created.json()['id']}")
-    assert (await client.get(f"/api/profiles/{PROFILE}/buyers")).json() == []
+    await client.delete(f"/api/buyers/{created.json()['id']}")
+    assert (await client.get("/api/buyers")).json() == []
 
 
 async def test_a_national_id_keeps_its_leading_zeros(client: httpx.AsyncClient) -> None:
     """Storing these as integers would silently corrupt them."""
     await client.post(
-        f"/api/profiles/{PROFILE}/buyers",
-        json={"name": "الف", "national_id": "0012345678", "person_type": 1},
+        "/api/buyers", json={"name": "الف", "national_id": "0012345678", "person_type": 1}
     )
-    listing = (await client.get(f"/api/profiles/{PROFILE}/buyers")).json()
+    listing = (await client.get("/api/buyers")).json()
     assert listing[0]["national_id"] == "0012345678"
 
 
 async def test_duplicate_buyer_is_rejected(client: httpx.AsyncClient) -> None:
     payload = {"name": "الف", "national_id": "10100302746"}
-    assert (await client.post(f"/api/profiles/{PROFILE}/buyers", json=payload)).status_code == 201
-    second = await client.post(f"/api/profiles/{PROFILE}/buyers", json=payload)
+    assert (await client.post("/api/buyers", json=payload)).status_code == 201
+    second = await client.post("/api/buyers", json=payload)
     assert second.status_code == 400
 
 
 async def test_goods_catalogue_with_one_default(client: httpx.AsyncClient) -> None:
     """A default pre-fills the invoice line, so exactly one may hold the flag."""
     first = await client.post(
-        f"/api/profiles/{PROFILE}/goods",
+        "/api/goods",
         json={
             "stuff_id": "2710000138624",
             "description": "سرسیلندر",
@@ -293,36 +347,59 @@ async def test_goods_catalogue_with_one_default(client: httpx.AsyncClient) -> No
         },
     )
     second = await client.post(
-        f"/api/profiles/{PROFILE}/goods",
+        "/api/goods",
         json={"stuff_id": "1710000138624", "description": "کالای دوم", "is_default": True},
     )
     assert first.status_code == second.status_code == 201
 
-    listing = (await client.get(f"/api/profiles/{PROFILE}/goods")).json()
+    listing = (await client.get("/api/goods")).json()
     defaults = [g for g in listing if g["is_default"]]
     assert len(defaults) == 1, "two defaults would give the form no answer"
     assert defaults[0]["stuff_id"] == "1710000138624"
 
-    await client.post(f"/api/profiles/{PROFILE}/goods/{first.json()['id']}/default")
-    listing = (await client.get(f"/api/profiles/{PROFILE}/goods")).json()
+    await client.post(f"/api/goods/{first.json()['id']}/default")
+    listing = (await client.get("/api/goods")).json()
     assert [g["stuff_id"] for g in listing if g["is_default"]] == ["2710000138624"]
 
 
-async def test_reference_data_is_scoped_to_a_profile(client: httpx.AsyncClient) -> None:
-    """A buyer entered against sandbox must not appear on a production invoice."""
+async def test_reference_data_needs_no_fiscal_memory(client: httpx.AsyncClient) -> None:
+    """The catalogues are reachable before a شناسه یکتای حافظه مالیاتی exists.
+
+    They used to hang off /api/profiles/{name}, which meant a taxpayer still
+    waiting on their fiscal memory could not enter a single customer or goods
+    code — the exact work that period is for. A شناسه ملی and a شناسه کالا/خدمت
+    are issued nationally and mean the same thing in both environments, so there
+    was never anything for the scoping to protect.
+    """
+    from moadian.api.deps import get_profile_store
+
+    application = client._transport.app  # type: ignore[attr-defined]
+    profiles = application.dependency_overrides[get_profile_store]()
+    for name in list(profiles.list_names()):
+        profiles.delete(name)
+    assert profiles.list_names() == []
+
+    created = await client.post(
+        "/api/buyers", json={"name": "خریدار زودهنگام", "national_id": "10100302746"}
+    )
+    assert created.status_code == 201
+    assert [b["name"] for b in (await client.get("/api/buyers")).json()] == ["خریدار زودهنگام"]
+
+    goods = await client.post("/api/goods", json={"stuff_id": "271", "description": "کالا"})
+    assert goods.status_code == 201
+    assert [g["stuff_id"] for g in (await client.get("/api/goods")).json()] == ["271"]
+
+
+async def test_a_buyer_is_shared_across_fiscal_memories(client: httpx.AsyncClient) -> None:
+    """One address book, not one per memory. The same customer buys from both."""
     await client.post(
         "/api/profiles",
-        json={
-            "name": "عملیاتی",
-            "memory_id": "B22327",
-            "environment": "production",
-        },
+        json={"name": "عملیاتی", "memory_id": "B22327", "environment": "production"},
     )
-    await client.post(
-        f"/api/profiles/{PROFILE}/buyers",
-        json={"name": "فقط آزمایشی", "national_id": "10100302746"},
-    )
-    assert (await client.get("/api/profiles/عملیاتی/buyers")).json() == []
+    await client.post("/api/buyers", json={"name": "مشترک", "national_id": "10100302746"})
+    # Nothing about the listing is profile-dependent any more; the same call
+    # serves whichever memory the operator happens to have selected.
+    assert [b["name"] for b in (await client.get("/api/buyers")).json()] == ["مشترک"]
 
 
 # ------------------------------------------------------------------ invoices

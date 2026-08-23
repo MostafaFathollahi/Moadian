@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import type { Buyer, ProfileView } from '../../api/types'
+import type { Buyer } from '../../api/types'
 import { Banner, Card, Empty, Field } from '../../components/common'
 
 const PERSON_TYPES = [
@@ -11,7 +11,13 @@ const PERSON_TYPES = [
   { value: 5, label: 'مصرف‌کننده نهایی' },
 ]
 
-export function BuyersPage({ profile }: { profile: ProfileView }) {
+/** خریداران — one address book, shared by every fiscal memory.
+ *
+ * Takes no profile. A buyer is identified by a nationally issued شناسه ملی,
+ * which does not change between the sandbox and production, so there was never
+ * a second address book to keep — only a second one to retype.
+ */
+export function BuyersPage() {
   const [buyers, setBuyers] = useState<Buyer[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState({
@@ -19,15 +25,15 @@ export function BuyersPage({ profile }: { profile: ProfileView }) {
   })
 
   const load = useCallback(() => {
-    api.buyers(profile.name).then(setBuyers).catch((c) => setError(String(c)))
-  }, [profile.name])
+    api.buyers().then(setBuyers).catch((c) => setError(String(c)))
+  }, [])
 
   useEffect(() => { setBuyers(null); load() }, [load])
 
   async function add() {
     setError(null)
     try {
-      await api.addBuyer(profile.name, {
+      await api.addBuyer({
         name: draft.name,
         national_id: draft.national_id,
         economic_code: draft.economic_code || null,
@@ -47,8 +53,9 @@ export function BuyersPage({ profile }: { profile: ProfileView }) {
         <div>
           <h1>خریداران</h1>
           <p>
-            مخصوص این حافظه مالیاتی. خریدارِ ثبت‌شده در محیط آزمایشی روی صورتحساب
-            عملیاتی ظاهر نمی‌شود.
+            دفترچه‌ی مشترک خریداران. شناسه ملی در همه‌ی حافظه‌های مالیاتی و در هر دو
+            محیط یکسان است، پس این فهرست یک بار پر می‌شود و همه‌جا در دسترس است —
+            از جمله پیش از آنکه شناسه یکتای حافظه مالیاتی گرفته شده باشد.
           </p>
         </div>
       </div>
@@ -132,7 +139,7 @@ export function BuyersPage({ profile }: { profile: ProfileView }) {
                         <button
                           className="btn ghost"
                           onClick={async () => {
-                            await api.deleteBuyer(profile.name, buyer.id)
+                            await api.deleteBuyer(buyer.id)
                             load()
                           }}
                         >

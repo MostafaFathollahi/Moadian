@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import type { EnvironmentInfo, ProfileView, SigningMaterial, UserInfo } from '../../api/types'
+import type {
+  CertificateCheck,
+  EnvironmentInfo,
+  ProfileView,
+  SigningMaterial,
+  UserInfo,
+} from '../../api/types'
 import { Banner, Card, Empty, Field } from '../../components/common'
 import { UsersPanel } from './UsersPanel'
 
@@ -21,11 +27,29 @@ export function AdminPanel({
   })
   const [testing, setTesting] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, string>>({})
+  const [checks, setChecks] = useState<CertificateCheck[] | null>(null)
+  const [checking, setChecking] = useState(false)
+
+  const runCertificateCheck = useCallback(async () => {
+    setChecking(true)
+    try {
+      setChecks(await api.verifySigningMaterial())
+    } catch (cause) {
+      setChecks(null)
+      setError(cause instanceof ApiError ? cause.message : String(cause))
+    } finally {
+      setChecking(false)
+    }
+  }, [])
 
   useEffect(() => {
     void api.signingMaterial().then(setMaterial).catch(() => setMaterial(null))
     void api.environments().then(setEnvironments).catch(() => undefined)
-  }, [])
+    // Run on open as well as on the button. The answer does not change until
+    // someone changes a file on the server, and an admin who opens this panel is
+    // usually here because something is already wrong.
+    void runCertificateCheck()
+  }, [runCertificateCheck])
 
   async function addProfile() {
     setError(null)
@@ -117,6 +141,27 @@ export function AdminPanel({
               </div>
             ))}
           </div>
+        )}
+      </Card>
+
+      <Card
+        title="آزمون تطابق گواهی و کلید"
+        actions={
+          <button className="btn" onClick={runCertificateCheck} disabled={checking}>
+            {checking ? 'در حال بررسی…' : 'بررسی مجدد'}
+          </button>
+        }
+      >
+        <p className="small muted">
+          کلید عمومی از فایل گواهی استخراج و با کلید خصوصی مقایسه می‌شود. این کار روی
+          سرور انجام می‌گیرد و هیچ بخشی از کلید به مرورگر ارسال نمی‌شود. اگر این دو زوج
+          نباشند، امضا ساخته می‌شود ولی سامانه مودیان آن را رد می‌کند — و آن موقع شماره
+          سریال صورتحساب مصرف شده است.
+        </p>
+        {!checks ? (
+          <Empty>در حال بررسی…</Empty>
+        ) : (
+          checks.map((check) => <CertificateCheckRow key={check.environment} check={check} />)
         )}
       </Card>
 
@@ -265,6 +310,59 @@ function MaterialRow({
       {/* File mode is the key's only protection unless it is PKCS#8-encrypted. */}
       {isKey && status.error && <div className="err small">{status.error}</div>}
       {!isKey && status.error && <div className="err small">{status.error}</div>}
+    </div>
+  )
+}
+
+/** One environment's certificate/key verdict.
+ *
+ * Shows the certificate even when the pair could not be compared. A locked key
+ * and a wrong key are different problems, and an operator who can see which
+ * certificate is deployed can at least confirm it is the right one.
+ */
+function CertificateCheckRow({ check }: { check: CertificateCheck }) {
+  const tone = check.ok ? 'ok' : check.matches === false ? 'danger' : 'warn'
+  const verdict = check.ok
+    ? 'زوج و معتبر'
+    : check.matches === false
+      ? 'عدم تطابق'
+      : 'قابل بررسی نبود'
+  return (
+    <div className="card" style={{ boxShadow: 'none', marginBlockStart: 12 }}>
+      <div className="spread" style={{ marginBottom: 8 }}>
+        <strong>{check.environmentLabel}</strong>
+        <span className={`chip ${tone}`}>{verdict}</span>
+      </div>
+      <p className="small" style={{ marginBlockEnd: 8 }}>{check.message}</p>
+      {check.certificate && (
+        <dl className="small muted" style={{ display: 'grid', gap: 2, margin: 0 }}>
+          <CertificateFact label="دارنده" value={check.certificate.subject} ltr />
+          <CertificateFact label="صادرکننده" value={check.certificate.issuer} ltr />
+          <CertificateFact label="شناسه ملی" value={check.certificate.nationalId ?? '—'} ltr />
+          <CertificateFact
+            label="اعتبار تا"
+            value={new Date(check.certificate.notAfter).toLocaleDateString('fa-IR')}
+          />
+          <CertificateFact
+            label="اثر انگشت کلید عمومی"
+            value={check.certificate.publicKeyFingerprint}
+            ltr
+          />
+          <CertificateFact label="فایل گواهی" value={check.certificatePath ?? '—'} ltr />
+          <CertificateFact label="فایل کلید" value={check.privateKeyPath ?? '—'} ltr />
+        </dl>
+      )}
+    </div>
+  )
+}
+
+function CertificateFact({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+  return (
+    <div className="spread" style={{ gap: 12 }}>
+      <dt>{label}</dt>
+      <dd className={ltr ? 'ltr' : undefined} style={{ margin: 0, textAlign: 'start' }}>
+        {value}
+      </dd>
     </div>
   )
 }

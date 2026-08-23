@@ -62,6 +62,36 @@ export interface SigningMaterial {
   keyPassphraseSet: boolean
 }
 
+export interface CertificateDetail {
+  subject: string
+  issuer: string
+  serialNumber: string
+  notBefore: string
+  notAfter: string
+  /** شناسه ملی, from the subject SERIALNUMBER. */
+  nationalId: string | null
+  keySize: number
+  publicKeyFingerprint: string
+}
+
+/** The answer to "is this private key actually this certificate's key?".
+ *
+ * `matches` is three-valued on purpose. `false` means the pair was compared and
+ * is wrong; `null` means it could not be compared at all — usually a key that is
+ * encrypted with no passphrase configured — and those call for different fixes.
+ */
+export interface CertificateCheck {
+  environment: string
+  environmentLabel: string
+  certificatePath: string | null
+  privateKeyPath: string | null
+  keyPassphraseSet: boolean
+  ok: boolean
+  matches: boolean | null
+  certificate: CertificateDetail | null
+  message: string
+}
+
 export interface PatternInfo {
   number: number
   name: string

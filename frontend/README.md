@@ -30,10 +30,10 @@ npm run dev        # http://localhost:5173
 | داشبورد | Counts per invoice state, recent invoices, certificate-expiry warning |
 | صدور صورتحساب | Entry form, محاسبه مبالغ, اعتبارسنجی, ذخیره پیش‌نویس, ارسال |
 | پیگیری ارسال‌ها | Sent ≠ confirmed — status per submission with the error detail |
-| خریداران | Reusable buyers, scoped to one fiscal memory |
+| خریداران | Reusable buyers, shared across fiscal memories; needs none to use |
 | کالا و خدمات | شناسه کالا/خدمت catalogue, one entry may be the form default |
-| تنظیمات | Fiscal memories, signing-material status, connection test, users |
-| راهنما | The user and admin guides, rendered from docs/*.md |
+| تنظیمات | Fiscal memories, signing-material status, certificate/key match, connection test, users |
+| راهنما | The user and admin guides, rendered from Docs/*.md |
 
 ## Authentication
 
@@ -74,6 +74,28 @@ treatment as Latin ones.
 with it. A شناسه یکتای حافظه مالیاتی belongs to exactly one environment, so
 offering environment and memory id as independent dropdowns would let an
 operator point a sandbox identity at production.
+
+**The reference catalogues sit above the profile gate.** خریداران and
+کالا و خدمات render whether or not a fiscal memory is selected, because neither
+needs one: a شناسه ملی and a شناسه کالا/خدمت are issued nationally and mean the
+same thing in both environments. They used to sit below it, which meant a
+taxpayer still waiting on their شناسه یکتا could not enter a single customer —
+the exact work that period is for. Only the dashboard, the entry form and the
+submission history are gated, and those genuinely belong to one memory.
+
+**Three themes, not a toggle.** `lib/theme.ts` writes `data-theme` on `<html>`,
+and *not writing it* is the third state — "follow the system" — which the CSS
+media query then answers. Every palette token is declared on bare `:root` as
+well as in the dark blocks, so a viewer who picks dark on a light machine gets a
+complete palette rather than a half-themed page. `main.tsx` applies the stored
+choice before the first render, so there is no white flash.
+
+**Form controls are themed by being form controls.** `color-scheme` is declared
+per theme so the browser renders its own chrome — spin buttons, the caret,
+scrollbars — to match, and inputs get their background from an element selector
+rather than from `.field`. The invoice line table lays inputs straight into
+`<td>`, and a `.field`-scoped rule left those with a white background under
+`color: inherit`'s near-white text: 1.2:1, which is invisible.
 
 **Production is visually distinct.** A banner and a coloured switcher, driven by
 `is_production` from the API. Nobody should have to read a URL to know whether

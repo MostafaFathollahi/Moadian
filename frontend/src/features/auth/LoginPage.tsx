@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import { setSession } from '../../lib/session'
+import { ThemeSwitch } from '../../components/ThemeSwitch'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -24,6 +25,12 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      {/* Reachable before signing in. The theme is a property of this browser,
+          not of an account, and the login screen is the first thing a
+          dark-preferring operator sees. */}
+      <div className="login-theme">
+        <ThemeSwitch />
+      </div>
       <form className="login-card" onSubmit={submit}>
         <h1>سامانه مودیان</h1>
         <p className="sub">صدور و ارسال صورتحساب الکترونیکی</p>

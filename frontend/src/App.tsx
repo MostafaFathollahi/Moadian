@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from './api/client'
-import type { ProfileView, UserInfo } from './api/types'
+import type { CertificateCheck, ProfileView, UserInfo } from './api/types'
 import { Banner } from './components/common'
 import { clearSession, getUser, onSessionChange } from './lib/session'
+import { ThemeSwitch } from './components/ThemeSwitch'
 import { AdminPanel } from './features/admin/AdminPanel'
 import { ChangePassword } from './features/auth/ChangePassword'
 import { LoginPage } from './features/auth/LoginPage'
@@ -112,6 +113,7 @@ function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
         ))}
 
         <div className="sidebar-foot">
+          <ThemeSwitch />
           <button className="nav-item" onClick={() => setRoute('password')}>
             <span>{user.display_name || user.username}</span>
             <span className="badge">{user.role === 'admin' ? 'مدیر' : 'کاربر'}</span>
@@ -134,30 +136,43 @@ function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
           </div>
         )}
 
+        {user.role === 'admin' && <CertificateWarning />}
+
         {!loading && profiles.length === 0 && (
           <Banner kind="info">
             هنوز هیچ حافظه مالیاتی تعریف نشده است. از بخش «تنظیمات» یک شناسه یکتا اضافه کنید.
+            تا آن زمان می‌توانید «خریداران» و «کالا و خدمات» را تکمیل کنید.
           </Banner>
         )}
 
+        {/* Buyers and goods sit above the profile gate, with help, settings and
+            the password form. They need no fiscal memory — and filling them in
+            is the work available while waiting for one, which the gate used to
+            make impossible. Everything below the gate really does belong to one
+            memory: a dashboard, an invoice, a submission history. */}
         {route === 'help' ? (
           <HelpPanel isAdmin={user.role === 'admin'} />
         ) : route === 'password' ? (
           <ChangePassword user={user} />
         ) : route === 'admin' ? (
           <AdminPanel profiles={profiles} onChanged={reloadProfiles} me={user} />
+        ) : route === 'buyers' ? (
+          <BuyersPage />
+        ) : route === 'goods' ? (
+          <GoodsPage />
         ) : !profile ? (
-          !loading && <Banner kind="warn">برای ادامه، یک حافظه مالیاتی انتخاب کنید.</Banner>
+          !loading && (
+            <Banner kind="warn">
+              برای این بخش، یک حافظه مالیاتی لازم است. آن را از «تنظیمات» تعریف و سپس از
+              نوار کناری انتخاب کنید.
+            </Banner>
+          )
         ) : route === 'dashboard' ? (
           <DashboardPage profile={profile} onNavigate={setRoute} />
         ) : route === 'invoice' ? (
           <InvoiceEntry profile={profile} />
-        ) : route === 'submissions' ? (
-          <SubmissionsPage profile={profile} />
-        ) : route === 'buyers' ? (
-          <BuyersPage profile={profile} />
         ) : (
-          <GoodsPage profile={profile} />
+          <SubmissionsPage profile={profile} />
         )}
       </main>
     </div>
@@ -195,5 +210,65 @@ function ProfileSwitcher({
         ))}
       </select>
     </div>
+  )
+}
+
+/** The certificate/key check, run once when the application loads.
+ *
+ * A private key that does not belong to its certificate signs perfectly well
+ * and is refused by the tax service, so the failure surfaces on a real
+ * submission with a serial already spent. There is no reason to wait for that:
+ * the check is one comparison, and the answer is the same every time until
+ * someone changes a file. Admins only — it names paths on the server, and it is
+ * an admin who can act on the answer.
+ *
+ * Silent when everything matches. A banner that appears on every load is a
+ * banner nobody reads on the load that matters.
+ */
+function CertificateWarning() {
+  const [problems, setProblems] = useState<CertificateCheck[]>([])
+
+  useEffect(() => {
+    void api
+      .verifySigningMaterial()
+      .then((checks) => {
+        // Both environments fall back to the same MOADIAN_CERTIFICATE_PATH
+        // unless overridden, and one broken file is one problem however many
+        // environments point at it.
+        const seen = new Set<string>()
+        setProblems(
+          checks.filter((check) => {
+            if (check.ok) return false
+            const key = `${check.certificatePath}|${check.privateKeyPath}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          }),
+        )
+      })
+      // A failed check is not itself a warning: the endpoint is admin-only and
+      // reports every certificate problem as a 200. Anything else is a network
+      // or session fault that the rest of the page will surface anyway.
+      .catch(() => setProblems([]))
+  }, [])
+
+  if (problems.length === 0) return null
+  return (
+    <>
+      {problems.map((problem) => (
+        <Banner key={problem.environment} kind={problem.matches === false ? 'err' : 'warn'}>
+          <strong>
+            {problem.matches === false
+              ? 'کلید خصوصی با گواهی امضا مطابقت ندارد'
+              : 'گواهی امضا آماده نیست'}
+            {' — '}
+            {problem.environmentLabel}
+          </strong>
+          <div className="small" style={{ marginBlockStart: 4 }}>
+            {problem.message} تا رفع این مشکل، ارسال صورتحساب انجام نخواهد شد.
+          </div>
+        </Banner>
+      ))}
+    </>
   )
 }

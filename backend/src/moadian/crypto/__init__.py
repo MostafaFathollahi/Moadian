@@ -6,7 +6,7 @@ JWE algorithm choices there are load-bearing and must not drift.
 
 from moadian.crypto.canonical import canonical_json, strip_nulls
 from moadian.crypto.encryptor import JweEncryptor, ServerKey
-from moadian.crypto.keys import SigningCredentials
+from moadian.crypto.keys import SigningCredentials, load_certificate
 from moadian.crypto.signatory import (
     SIGT_FORMAT,
     Pkcs8Signatory,
@@ -19,6 +19,7 @@ __all__ = [
     "canonical_json",
     "strip_nulls",
     "SigningCredentials",
+    "load_certificate",
     "Signatory",
     "Pkcs8Signatory",
     "SIGT_FORMAT",
