@@ -1,0 +1,68 @@
+# Moadian — صدور و ارسال صورتحساب الکترونیکی
+#
+# Install:
+#   sudo cp deploy/moadian.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now moadian
+#
+# Bound to 127.0.0.1 deliberately. This process holds the key that signs tax
+# invoices; it is reached over an SSH tunnel, not over the network. Putting it
+# on 0.0.0.0 would expose an invoice-signing API to anything that can route to
+# the host, so change the address only behind a TLS terminator you control.
+#
+# Secrets are NOT listed here. systemd unit files are world-readable, so the
+# passphrases live in backend/.env (chmod 600), which pydantic-settings reads
+# from WorkingDirectory at startup.
+
+[Unit]
+Description=Moadian electronic invoicing API and UI
+Documentation=file:/home/mstf/Moadian/Docs/ADMIN_GUIDE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=mstf
+Group=mstf
+WorkingDirectory=/home/mstf/Moadian/backend
+ExecStart=/home/mstf/Moadian/backend/.venv/bin/uvicorn \
+    moadian.api.app:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --proxy-headers
+
+# One worker, and not a knob to turn casually. The invoice serial counter is a
+# file guarded by an flock, so several workers on one host are safe — but the
+# in-process caches (server public key, profile store, SQLite connection) are
+# per worker, and the record store deliberately keeps a single connection. If
+# this ever needs more throughput, read the class docstring on
+# MonotonicSerialCounter first: it says what a multi-host deployment must
+# replace before it can issue a second serial anywhere.
+
+Restart=always
+RestartSec=5
+# A crash loop on a bad .env should be visible, not endless.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# --- hardening ---------------------------------------------------------
+# The private key is read once at startup and never written. Everything this
+# service writes lives under backend/instance.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+ReadWritePaths=/home/mstf/Moadian/backend/instance
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=moadian
+
+[Install]
+WantedBy=multi-user.target

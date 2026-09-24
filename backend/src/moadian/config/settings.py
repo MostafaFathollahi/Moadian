@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Holds the profile store, the taxid serial counter, and cached server keys.
     instance_dir: Path = Path("instance")
 
+    #: The built UI (frontend/dist), served by this process when set. Unset in
+    #: development, where Vite serves it and proxies /api here. Setting it puts
+    #: the UI and the API on one origin and therefore one port, which is what a
+    #: single systemd unit behind an SSH tunnel needs.
+    static_dir: Path | None = None
+
     #: Unlocks the encrypted profile store. Required — the API cannot read any
     #: fiscal memory without it.
     master_passphrase: str | None = None

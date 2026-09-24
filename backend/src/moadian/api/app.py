@@ -24,6 +24,7 @@ from typing import Annotated, Any
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from moadian.auth import UserStore, auth_router, current_user, seed_users, users_router
@@ -990,6 +991,23 @@ def create_app(
     @app.get("/api/health", tags=["metadata"])
     def health():
         return {"ok": True}
+
+    # Last, and only last: a mount at "/" matches anything the routes above did
+    # not, so registering it earlier would swallow every /api path below it.
+    static_dir = settings.static_dir
+    if static_dir is not None:
+        resolved = Path(static_dir).expanduser()
+        if (resolved / "index.html").is_file():
+            app.mount("/", StaticFiles(directory=resolved, html=True), name="ui")
+            _log.info("serving the UI from %s", resolved)
+        else:
+            # Not fatal. An API with no UI is still a working API, and the
+            # operator may be starting the service precisely to build the UI.
+            _log.warning(
+                "MOADIAN_STATIC_DIR is %s but there is no index.html there; "
+                "the API will run without a UI",
+                resolved,
+            )
 
     return app
 
