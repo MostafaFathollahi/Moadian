@@ -44,10 +44,18 @@ from moadian.errors import (
 from moadian.models import InquiryResult, Invoice, RequestStatus
 from moadian.pipeline import MAX_INQUIRY_IDS, InvoicePipeline, MonotonicSerialCounter
 from moadian.rules import RuleEngine, load_rules, recompute
-from moadian.store import Buyer, GoodsService, InvoiceRecord, InvoiceState, RecordStore
+from moadian.store import (
+    Buyer,
+    CatalogueStore,
+    GoodsService,
+    InvoiceRecord,
+    InvoiceState,
+    RecordStore,
+)
 
 from .deps import (
     ActiveProfile,
+    get_catalogue_store,
     get_profile_store,
     get_record_store,
     get_rule_engine,
@@ -583,6 +591,60 @@ def create_app(
     # worse, put both catalogues behind a شناسه یکتای حافظه مالیاتی that a new
     # taxpayer does not have yet. Building them up is exactly what there is to do
     # while waiting for one.
+
+    # -- catalogue --------------------------------------------------------
+    #
+    # The organization's published شناسه کالا/خدمت list. Read-only here: it is
+    # loaded by tools/import_catalogue.py, not over HTTP. The export is tens of
+    # megabytes per part and belongs on the server out of band, the same as the
+    # signing material — an upload endpoint for it would buy nothing and add a
+    # way to fill the disk.
+
+    @app.get("/api/catalogue/status", tags=["catalogue"], dependencies=AUTHENTICATED)
+    def catalogue_status(
+        catalogue: Annotated[CatalogueStore, Depends(get_catalogue_store)],
+    ):
+        """Whether a catalogue is loaded, how big it is, and when it came in.
+
+        Authenticated rather than admin-only: the invoice form needs to know
+        whether searching will work, so it can say "no catalogue is loaded"
+        instead of silently returning nothing for every query.
+        """
+        return catalogue.status()
+
+    @app.get("/api/catalogue/search", tags=["catalogue"], dependencies=AUTHENTICATED)
+    def catalogue_search(
+        catalogue: Annotated[CatalogueStore, Depends(get_catalogue_store)],
+        q: Annotated[str, Query(description="شناسه کالا/خدمت, or words from its شرح")] = "",
+        limit: int = 25,
+    ):
+        """جست‌وجوی شناسه کالا/خدمت — by number or by description.
+
+        All digits searches the identifier by prefix; anything else matches every
+        word against the description. Persian and Arabic-Indic digits, Arabic
+        yeh and kaf, and ZWNJ are all folded first — see :mod:`moadian.persian`.
+        Only codes still in force are returned.
+        """
+        return [entry.as_dict() for entry in catalogue.search(q, limit=limit)]
+
+    @app.get("/api/catalogue/item/{stuff_id}", tags=["catalogue"], dependencies=AUTHENTICATED)
+    def catalogue_item(
+        stuff_id: str,
+        catalogue: Annotated[CatalogueStore, Depends(get_catalogue_store)],
+    ):
+        """One code, with every VAT rate it has carried, newest first.
+
+        The history is the point: an اصلاحی against an older invoice has to
+        reproduce the rate that invoice was issued under, not today's.
+        """
+        history = catalogue.history(stuff_id)
+        if not history:
+            raise HTTPException(404, "شناسه کالا/خدمت در فهرست سازمان یافت نشد")
+        current = next((e for e in history if e.is_current), None)
+        return {
+            "current": current.as_dict() if current else None,
+            "history": [entry.as_dict() for entry in history],
+        }
 
     @app.get("/api/buyers", tags=["reference"], dependencies=AUTHENTICATED)
     def list_buyers(store: Annotated[RecordStore, Depends(get_record_store)]):

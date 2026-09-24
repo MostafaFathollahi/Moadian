@@ -103,6 +103,17 @@ class Settings(BaseSettings):
         """Where :class:`~moadian.config.ProfileStore` keeps the encrypted profiles."""
         return self.instance_dir / "profiles.json"
 
+    @property
+    def catalogue_path(self) -> Path:
+        """Where the official شناسه کالا/خدمت catalogue is cached.
+
+        Its own file beside the records, never inside them: it is bulk reference
+        data that a re-import rebuilds, and records.sqlite is the one thing here
+        that cannot be rebuilt from anything. See
+        :mod:`moadian.store.catalogue`.
+        """
+        return self.instance_dir / "catalogue.sqlite"
+
     def serial_counter_path(self, memory_id: str) -> Path:
         """Where :class:`~moadian.pipeline.MonotonicSerialCounter` keeps one memory's serial.
 

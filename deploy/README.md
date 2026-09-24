@@ -104,6 +104,31 @@ cd ~/Moadian/backend
 
 Secrets go here and not in the unit file, which is world-readable.
 
+## The شناسه کالا/خدمت catalogue
+
+Optional, and worth doing: it turns the invoice form's code field into a search
+over the organization's whole published list instead of a hand-kept shortlist.
+
+```bash
+# From کارپوشه: اقلام کالا و خدمت ← دریافت فایل. Every part, one command —
+# each part is a different slice, and a second run replaces the first.
+cd ~/Moadian/backend
+./.venv/bin/python tools/import_catalogue.py ~/product_service_*.csv
+```
+
+It lands in `instance/catalogue.sqlite`, **not** in `records.sqlite`, and that is
+deliberate. The catalogue is ~123 MB for the services export alone and is
+rebuilt by re-running the import; `records.sqlite` is a few kilobytes and cannot
+be rebuilt from anything. Keeping them apart means a catalogue refresh can never
+endanger the profiles and invoices, and a backup of what actually matters stays
+small enough that someone will take one.
+
+So: back up `profiles.json`, `records.sqlite` and every `serial-*` file. Skip
+`catalogue.sqlite`.
+
+No restart is needed — the import writes the file and the running service picks
+up the new contents on the next query.
+
 ## Reaching it
 
 ```bash

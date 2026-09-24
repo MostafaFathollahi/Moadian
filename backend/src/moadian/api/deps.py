@@ -21,7 +21,7 @@ from fastapi import Path as PathParam
 from moadian.config import Profile, ProfileStore, Settings
 from moadian.errors import ConfigurationError
 from moadian.rules import RuleEngine
-from moadian.store import RecordStore
+from moadian.store import CatalogueStore, RecordStore
 
 __all__ = [
     "get_settings",
@@ -61,6 +61,14 @@ def get_profile_store() -> ProfileStore:
 def get_record_store() -> RecordStore:
     settings = get_settings()
     return RecordStore(Path(settings.instance_dir) / "records.sqlite")
+
+
+@lru_cache(maxsize=1)
+def get_catalogue_store() -> CatalogueStore:
+    """The official code list. Opened lazily: an install that never imports it
+    should not pay for the file, and the search endpoints report it as empty."""
+    settings = get_settings()
+    return CatalogueStore(settings.catalogue_path)
 
 
 @lru_cache(maxsize=1)

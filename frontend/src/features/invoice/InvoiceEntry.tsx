@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import type {
   Buyer,
+  CatalogueStatus,
   FieldRule,
   GoodsService,
   InvoiceLine,
@@ -12,6 +13,7 @@ import type {
   VerifyResult,
 } from '../../api/types'
 import { Banner, Card, Field, money } from '../../components/common'
+import { StuffPicker } from '../catalogue/StuffPicker'
 import { IssueList } from './IssueList'
 
 /** Blank line. Only the fields an operator types — everything derived comes
@@ -32,6 +34,7 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
   const [rules, setRules] = useState<PatternFields | null>(null)
   const [buyers, setBuyers] = useState<Buyer[]>([])
   const [goods, setGoods] = useState<GoodsService[]>([])
+  const [catalogue, setCatalogue] = useState<CatalogueStatus | null>(null)
   const [verification, setVerification] = useState<VerifyResult | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null)
@@ -48,6 +51,9 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
   useEffect(() => {
     void api.buyers().then(setBuyers).catch(() => undefined)
     void api.goods().then(setGoods).catch(() => undefined)
+    // Status, not results: without it an un-imported catalogue looks
+    // identical to a search that matched nothing.
+    void api.catalogueStatus().then(setCatalogue).catch(() => undefined)
   }, [])
 
   // Requiredness comes from جدول ۱ via the API, never from hard-coded rules
@@ -379,32 +385,25 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
               {invoice.body.map((line, index) => (
                 <tr key={index}>
                   <td>
-                    <select
+                    <StuffPicker
                       value={line.sstid ?? ''}
-                      onChange={(e) => {
-                        const item = goods.find((g) => g.stuff_id === e.target.value)
-                        patchLine(index, item
-                          ? {
-                              sstid: item.stuff_id,
-                              sstt: item.description,
-                              mu: item.unit ?? '',
-                              vra: item.vat_rate ?? line.vra,
-                              fee: item.default_fee ?? line.fee,
-                            }
-                          : { sstid: e.target.value })
-                      }}
-                      style={{
-                        minWidth: 170,
-                        borderColor: issuesByField.has(`sstid#${index}`) ? 'var(--danger)' : undefined,
-                      }}
-                    >
-                      <option value="">— انتخاب —</option>
-                      {goods.map((g) => (
-                        <option key={g.id} value={g.stuff_id}>
-                          {g.description}
-                        </option>
-                      ))}
-                    </select>
+                      favourites={goods}
+                      catalogueEmpty={catalogue?.empty}
+                      invalid={issuesByField.has(`sstid#${index}`)}
+                      onPick={(pick) =>
+                        patchLine(index, {
+                          sstid: pick.stuffId,
+                          sstt: pick.description,
+                          // A catalogue row carries no unit or price — only the
+                          // operator's own entry does — so those hold whatever
+                          // the line already had rather than being cleared.
+                          mu: pick.unit ?? line.mu ?? '',
+                          vra: pick.vatRate ?? line.vra,
+                          fee: pick.fee ?? line.fee,
+                        })
+                      }
+                      onRaw={(text) => patchLine(index, { sstid: text })}
+                    />
                   </td>
                   <td>
                     <input

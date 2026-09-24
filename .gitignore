@@ -90,3 +90,11 @@ Thumbs.db
 
 ### TypeScript build cache ###
 *.tsbuildinfo
+
+# The organization's شناسه کالا/خدمت exports. Tens of megabytes per part, and
+# reference data that tools/import_catalogue.py loads from wherever they sit —
+# they have no business in git. A stray one in the working tree is normal; the
+# point of this rule is that `git add -A` can never sweep 57MB into a commit.
+product_service_*.csv
+product_service_*.zip
+*/product_service_*.csv

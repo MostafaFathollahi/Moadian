@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import type { GoodsService } from '../../api/types'
+import type { CatalogueEntry, CatalogueStatus, GoodsService } from '../../api/types'
 import { Banner, Card, Empty, Field, money } from '../../components/common'
 
 /** کالا و خدمات — one catalogue, shared by every fiscal memory.
@@ -54,6 +54,19 @@ export function GoodsPage() {
 
       {error && <Banner kind="err">{error}</Banner>}
 
+      <CatalogueLookup
+        onPick={(entry) =>
+          setDraft({
+            ...draft,
+            stuff_id: entry.stuffId,
+            description: entry.description,
+            // The catalogue publishes the rate; the unit and the price are the
+            // operator's, which is the whole reason a favourite is worth saving.
+            vat_rate: entry.vatRate === null ? '' : String(entry.vatRate),
+          })
+        }
+      />
+
       <div className="grid cols-2">
         <Card title="افزودن کالا/خدمت">
           <Field label="شناسه کالا/خدمت" required hint="شناسه اختصاص‌یافته توسط سازمان">
@@ -63,7 +76,6 @@ export function GoodsPage() {
               onChange={(e) => setDraft({ ...draft, stuff_id: e.target.value })}
             />
           </Field>
-          <StuffIdLookup />
           <Field label="شرح کالا/خدمت" required>
             <input
               value={draft.description}
@@ -173,17 +185,113 @@ export function GoodsPage() {
 
 /** Where the شناسه کالا/خدمت actually comes from.
  *
- * The organization publishes the whole table at stuffid.tax.gov.ir, searchable
- * and downloadable. Nothing here can validate an sstid — only the tax service
- * knows which codes exist — so the next best thing is to put the authoritative
- * list one click from the field that needs it, rather than leaving an operator
- * to guess or to hunt for the portal.
+ * The organization publishes the whole table, and once it has been imported
+ * (tools/import_catalogue.py) it is searchable here — by number or by شرح, with
+ * Persian/Arabic spelling and digits folded, so آشپزی finds rows stored as
+ * اشپزی. Picking a result fills the form beside it; it is not saved until the
+ * operator adds it, because the parts the catalogue does not know — unit,
+ * default price — are exactly the parts worth entering once.
+ *
+ * Nothing here can *validate* a شناسه: only the tax service knows which codes
+ * exist, and our copy of the list is as old as the last import. So an operator
+ * may always type a code the search did not find.
  */
-function StuffIdLookup() {
+function CatalogueLookup({ onPick }: { onPick: (entry: CatalogueEntry) => void }) {
+  const [status, setStatus] = useState<CatalogueStatus | null>(null)
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<CatalogueEntry[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void api.catalogueStatus().then(setStatus).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setHits(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      setBusy(true)
+      api
+        .catalogueSearch(query, 20)
+        .then(setHits)
+        .catch(() => setHits([]))
+        .finally(() => setBusy(false))
+    }, 220)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  if (status?.empty) {
+    return (
+      <Card title="جست‌وجو در فهرست سازمان">
+        <p className="small">
+          فهرست شناسه‌های کالا و خدمات روی این سرور بارگذاری نشده است. فایل CSV را از
+          کارپوشه دریافت کنید (اقلام کالا و خدمت ← دریافت فایل) و همه‌ی بخش‌ها را با یک
+          فرمان وارد کنید:
+        </p>
+        <pre className="ltr small code-block">
+          .venv/bin/python tools/import_catalogue.py ~/Downloads/product_service_*.csv
+        </pre>
+        <StuffIdPortalLink />
+      </Card>
+    )
+  }
+
   return (
-    <p className="small muted" style={{ marginBlockEnd: 12 }}>
-      فهرست عمومی شناسه‌های کالا و خدمات را می‌توانید در سامانه‌ی سازمان جست‌وجو و
-      دریافت کنید:{' '}
+    <Card title="جست‌وجو در فهرست سازمان">
+      <Field
+        label="شناسه یا شرح کالا/خدمت"
+        hint={
+          status
+            ? `${status.current.toLocaleString('fa-IR')} شناسه فعال — آخرین بارگذاری ${
+                status.importedAt ? new Date(status.importedAt).toLocaleDateString('fa-IR') : '—'
+              }`
+            : 'در حال بارگذاری…'
+        }
+      >
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="مثلاً: نرم افزار — یا ۲۳۳۰۰۰۴۵۶۷۴۱۳"
+        />
+      </Field>
+
+      {busy && <p className="small muted">در حال جست‌وجو…</p>}
+
+      {hits && hits.length === 0 && !busy && (
+        <Empty>موردی یافت نشد. شناسه را می‌توانید دستی وارد کنید.</Empty>
+      )}
+
+      {hits && hits.length > 0 && (
+        <div className="picker-static">
+          {hits.map((hit) => (
+            <button
+              type="button"
+              className="picker-row"
+              key={hit.stuffId}
+              onClick={() => onPick(hit)}
+            >
+              <span className="picker-desc">{hit.description}</span>
+              <span className="picker-meta ltr">
+                {hit.stuffId}
+                {hit.vatRate !== null && ` · ${hit.vatRate}%`}
+                {hit.taxable && <span className="rtl"> · {hit.taxable}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <StuffIdPortalLink />
+    </Card>
+  )
+}
+
+function StuffIdPortalLink() {
+  return (
+    <p className="small muted" style={{ marginBlockEnd: 0, marginBlockStart: 12 }}>
+      فهرست رسمی و به‌روز:{' '}
       <a
         className="ltr"
         href="https://stuffid.tax.gov.ir/"

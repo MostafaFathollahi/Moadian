@@ -9,6 +9,9 @@
 import { clearSession, getToken } from '../lib/session'
 import type {
   Buyer,
+  CatalogueEntry,
+  CatalogueItem,
+  CatalogueStatus,
   CertificateCheck,
   Dashboard,
   EnvironmentInfo,
@@ -221,6 +224,15 @@ export const api = {
     request<InquiredRecord>(`/api/profiles/${encode(profile)}/invoices/${id}/inquire`, {
       method: 'POST',
     }),
+  /** The organization's code list. Read-only — it is loaded on the server by
+   *  tools/import_catalogue.py, not uploaded through here. */
+  catalogueStatus: () => request<CatalogueStatus>('/api/catalogue/status'),
+  catalogueSearch: (q: string, limit = 25) =>
+    request<CatalogueEntry[]>(
+      `/api/catalogue/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  catalogueItem: (stuffId: string) =>
+    request<CatalogueItem>(`/api/catalogue/item/${encode(stuffId)}`),
   inquiryByReference: (profile: string, references: string[]) =>
     request<unknown[]>(
       `/api/profiles/${encode(profile)}/inquiry/by-reference?` +

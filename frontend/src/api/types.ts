@@ -285,3 +285,38 @@ export interface SubmitResult {
   uid: string | null
   referenceNumber: string | null
 }
+
+/** One row of the organization's published شناسه کالا/خدمت list.
+ *
+ * Distinct from [GoodsService], which is the operator's own shortlist. This is
+ * reference data we only ever read; that is a favourite they curated. */
+export interface CatalogueEntry {
+  stuffId: string
+  description: string
+  vatRate: number | null
+  /** مشمول | معاف | غیر مشمول */
+  taxable: string | null
+  /** Jalali, as the organization exported it — not converted. */
+  runDate: string | null
+  expirationDate: string | null
+  kind: string | null
+  pricing: string | null
+  isCurrent: boolean
+}
+
+export interface CatalogueStatus {
+  total: number
+  current: number
+  superseded: number
+  importedAt: string | null
+  source: string | null
+  /** No catalogue imported yet. The UI must say so rather than show "no
+   *  results", which reads as a broken search. */
+  empty: boolean
+}
+
+export interface CatalogueItem {
+  current: CatalogueEntry | null
+  /** Every VAT rate this code has carried, newest first. */
+  history: CatalogueEntry[]
+}
