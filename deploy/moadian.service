@@ -20,6 +20,11 @@ Documentation=file:/home/mstf/Moadian/Docs/ADMIN_GUIDE.md
 After=network-online.target
 Wants=network-online.target
 
+# [Unit], not [Service]: systemd ignores these under [Service] and says so.
+# A crash loop on a bad .env should be visible, not endless.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=exec
 User=mstf
@@ -42,9 +47,6 @@ ExecStart=/home/mstf/Moadian/backend/.venv/bin/uvicorn \
 
 Restart=always
 RestartSec=5
-# A crash loop on a bad .env should be visible, not endless.
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 # --- hardening ---------------------------------------------------------
 # The private key is read once at startup and never written. Everything this

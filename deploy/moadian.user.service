@@ -1,0 +1,44 @@
+# Moadian — صدور و ارسال صورتحساب الکترونیکی
+#
+# A *user* unit, because installing into /etc/systemd/system needs a sudo
+# password this host asks for. It survives reboot all the same: the account has
+# lingering enabled (loginctl enable-linger mstf), so its systemd instance
+# starts at boot rather than at first login.
+#
+# Bound to 127.0.0.1 deliberately. This process holds the key that signs tax
+# invoices; it is reached over an SSH tunnel, not over the network.
+#
+# No secrets here — unit files are world-readable. They live in backend/.env
+# at 0600, which pydantic-settings reads from WorkingDirectory at startup.
+
+[Unit]
+Description=Moadian electronic invoicing API and UI
+Documentation=file:%h/Moadian/Docs/ADMIN_GUIDE.md
+After=network-online.target
+
+# These belong to [Unit]; systemd ignores them under [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+WorkingDirectory=%h/Moadian/backend
+ExecStart=%h/Moadian/backend/.venv/bin/uvicorn moadian.api.app:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers
+
+# One worker, and not a knob to turn casually. The serial counter is a file
+# guarded by an flock so several workers on one host are safe, but the caches
+# (server public key, profile store, the single SQLite connection) are per
+# worker. Read MonotonicSerialCounter before scaling this past one host.
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=moadian
+
+[Install]
+WantedBy=default.target
