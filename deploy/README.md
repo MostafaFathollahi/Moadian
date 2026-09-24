@@ -54,13 +54,35 @@ refused by the organization — and by then a serial has been spent on an invoic
 that cannot be reissued under the same number.
 
 ```bash
+read -rs -p 'passphrase: ' PASS; echo; export PASS
 diff <(openssl x509 -in /secure/moadian/cert.crt -noout -pubkey) \
-     <(openssl pkey -in /secure/moadian/key.pem -pubout) \
+     <(openssl pkey -in /secure/moadian/key.pem -pubout -passin env:PASS) \
   && echo MATCH || echo MISMATCH
+unset PASS
 ```
 
-The same check runs at every startup and lands in the journal, and the admin
-panel exposes it at `GET /api/signing-material/verify`.
+`-passin env:PASS` is not optional for an encrypted key. Let `openssl pkey`
+prompt from inside `<(...)` and the subshell contends for the terminal: the
+prompt paints, the keystrokes do not land, and after three tries openssl exits
+having read nothing. `diff` then compares nine lines against zero and reports
+**MISMATCH** — a false accusation against a pair that may be perfectly fine.
+
+Tell the two apart by the error, not the verdict:
+
+| openssl says | it means |
+|---|---|
+| `UI_process: processing error: while reading strings`, `unable to get passphrase` | no passphrase was read. The verdict is meaningless. |
+| `bad decrypt`, `maybe wrong password` | the passphrase was read and is wrong. |
+| nothing, and `MISMATCH` | a real mismatch. |
+
+`env:` rather than `pass:` because an argument is visible in `ps` to every user
+on the host; the environment of a running process is visible only to its owner
+and root.
+
+The application runs the same comparison at every startup and logs it, and the
+admin panel exposes it at `GET /api/signing-material/verify` — where `matches`
+is `true`, `false`, or `null` when the key could not be opened at all. Once the
+passphrase is in `.env` that is the easier route, and it needs no `openssl`.
 
 Then the end-to-end version, which also proves the organization accepts the
 certificate for this fiscal memory:
