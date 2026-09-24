@@ -462,6 +462,36 @@ class RecordStore:
         with self._read() as cursor:
             return [self._invoice(row) for row in cursor.execute(sql, params).fetchall()]
 
+    def list_awaiting_inquiry(self, profile: str, limit: int = 500) -> list[InvoiceRecord]:
+        """Records the organization has accepted but not yet ruled on.
+
+        A ``SENT`` record with no شماره پیگیری is one whose batch response
+        carried no result for its uid, so there is nothing to inquire by — those
+        are excluded rather than reported as pending forever. See
+        :class:`~moadian.pipeline.InvoiceSubmission`.
+        """
+        with self._read() as cursor:
+            rows = cursor.execute(
+                "SELECT * FROM invoices WHERE profile = ? AND state = ? "
+                "AND reference_number IS NOT NULL AND reference_number != '' "
+                "ORDER BY id ASC LIMIT ?",
+                (profile, InvoiceState.SENT, limit),
+            ).fetchall()
+        return [self._invoice(row) for row in rows]
+
+    def find_by_tax_id(self, profile: str, tax_id: str) -> InvoiceRecord | None:
+        """The record carrying this شماره منحصر به فرد مالیاتی, if we issued it.
+
+        Used to resolve an ابطالی back to the invoice it voids. Scoped to the
+        profile: a tax id belongs to one fiscal memory.
+        """
+        with self._read() as cursor:
+            row = cursor.execute(
+                "SELECT * FROM invoices WHERE profile = ? AND tax_id = ? ORDER BY id DESC LIMIT 1",
+                (profile, tax_id),
+            ).fetchone()
+        return self._invoice(row) if row else None
+
     def get_invoice(self, invoice_id: int) -> InvoiceRecord | None:
         with self._read() as cursor:
             row = cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()

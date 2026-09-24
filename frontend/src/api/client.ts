@@ -13,6 +13,8 @@ import type {
   Dashboard,
   EnvironmentInfo,
   GoodsService,
+  InquiredRecord,
+  InquiryOutcome,
   InvoicePayload,
   InvoiceRecord,
   PatternFields,
@@ -210,6 +212,15 @@ export const api = {
     request<InvoiceRecord[]>(
       `/api/profiles/${encode(profile)}/invoices${state ? `?state=${encode(state)}` : ''}`,
     ),
+  /** استعلام for every invoice still awaiting a verdict, writing the result back. */
+  inquirePending: (profile: string) =>
+    request<InquiryOutcome>(`/api/profiles/${encode(profile)}/invoices/inquire`, {
+      method: 'POST',
+    }),
+  inquireOne: (profile: string, id: number) =>
+    request<InquiredRecord>(`/api/profiles/${encode(profile)}/invoices/${id}/inquire`, {
+      method: 'POST',
+    }),
   inquiryByReference: (profile: string, references: string[]) =>
     request<unknown[]>(
       `/api/profiles/${encode(profile)}/inquiry/by-reference?` +

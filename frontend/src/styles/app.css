@@ -306,6 +306,15 @@ td.numeric, th.numeric { text-align: end; font-variant-numeric: tabular-nums; }
 .issue .cite { color: var(--muted); font-size: 11px; }
 .issue .delta { font-variant-numeric: tabular-nums; }
 
+/* The organization's answer sits above our own اعتبارسنجی in an expanded row,
+   with a heading each — unlabelled, the two lists read as one. */
+.detail-head {
+  margin: 10px 0 6px; font-size: 12.5px; font-weight: 700; color: var(--muted);
+}
+.detail-head:first-child { margin-top: 2px; }
+.inquiry-panel { padding-bottom: 4px; }
+.inquiry-panel .empty { padding: 8px 12px; text-align: start; }
+
 .empty { color: var(--muted); text-align: center; padding: 28px 12px; font-size: 13px; }
 
 .muted { color: var(--muted); }

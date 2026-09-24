@@ -758,3 +758,190 @@ async def test_an_invalid_subject_is_refused(client: httpx.AsyncClient) -> None:
         f"/api/profiles/{PROFILE}/invoices/{invoice_id}/referring", params={"subject": 1}
     )
     assert response.status_code == 400
+
+
+# ------------------------------------------------------- inquiry reconciliation
+
+
+def _mock_state(transport: httpx.ASGITransport):
+    """The mock service's own view of what it accepted."""
+    return transport.app.state.mock  # type: ignore[union-attr]
+
+
+def _set_status(transport: httpx.ASGITransport, status: str) -> None:
+    """Make the mock answer every inquiry with ``status``."""
+    for submission in _mock_state(transport).submissions.values():
+        submission.status = status
+
+
+async def _submit(client: httpx.AsyncClient, invoice: dict | None = None) -> dict:
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit",
+        json={"invoice": invoice or valid_invoice()},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _record(client: httpx.AsyncClient, invoice_id: int) -> dict:
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    return next(r for r in listing if r["id"] == invoice_id)
+
+
+async def test_submission_alone_never_reaches_confirmed(client: httpx.AsyncClient) -> None:
+    """`POST /invoice` reports acceptance, not a verdict.
+
+    The regression this guards: a submit handler that optimistically recorded
+    CONFIRMED would tell an operator an invoice is in the کارپوشه before the
+    organization has looked at it, and a later rejection would never be seen.
+    """
+    submitted = await _submit(client)
+    assert submitted["state"] == "sent"
+    assert submitted["referenceNumber"]
+
+
+async def test_inquiry_moves_a_successful_submission_to_confirmed(
+    client: httpx.AsyncClient,
+) -> None:
+    submitted = await _submit(client)
+
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert outcome["checked"] == 1
+    assert outcome["updated"] == 1
+    assert outcome["records"][0]["previousState"] == "sent"
+    assert outcome["records"][0]["state"] == "confirmed"
+    assert outcome["records"][0]["inquiry"]["status"] == "SUCCESS"
+
+    assert (await _record(client, submitted["id"]))["state"] == "confirmed"
+
+
+async def test_inquiry_moves_a_failed_submission_to_rejected(
+    client: httpx.AsyncClient, mock_transport: httpx.ASGITransport
+) -> None:
+    """A rejection is the case the whole screen exists for."""
+    submitted = await _submit(client)
+    _set_status(mock_transport, "FAILED")
+
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert outcome["records"][0]["state"] == "rejected"
+
+    record = await _record(client, submitted["id"])
+    assert record["state"] == "rejected"
+    assert record["detail"]["inquiry"]["status"] == "FAILED"
+
+
+@pytest.mark.parametrize("status", ["IN_PROGRESS", "TIMEOUT", "NOT_FOUND"])
+async def test_a_non_verdict_leaves_the_invoice_sent(
+    client: httpx.AsyncClient, mock_transport: httpx.ASGITransport, status: str
+) -> None:
+    """None of these says the organization refused the invoice.
+
+    RC_TICS §8 answers all three the same way — inquire again later. Moving the
+    record out of SENT would strand a queued invoice in a terminal state, and
+    for NOT_FOUND it would invite the one action that must never be taken: a
+    resubmit, which spends a second serial on an invoice already in the queue.
+    """
+    submitted = await _submit(client)
+    _set_status(mock_transport, status)
+
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert outcome["checked"] == 1
+    assert outcome["updated"] == 0
+
+    record = await _record(client, submitted["id"])
+    assert record["state"] == "sent"
+    # Not moved, but the attempt is still on the record.
+    assert record["detail"]["inquiry"]["status"] == status
+
+
+async def test_inquiry_keeps_our_own_verification_report(client: httpx.AsyncClient) -> None:
+    """Two opinions about one invoice, and the operator needs both.
+
+    ``detail`` holds the اعتبارسنجی we ran before sending. Overwriting it with
+    the organization's answer would destroy the only record of what we predicted
+    at the moment the two disagree — which is exactly when someone is looking.
+    """
+    submitted = await _submit(client)
+    await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")
+
+    detail = (await _record(client, submitted["id"]))["detail"]
+    assert detail["ok"] is True
+    assert detail["errors"] == []
+    assert detail["inquiry"]["status"] == "SUCCESS"
+
+
+async def test_only_invoices_awaiting_a_verdict_are_asked_about(
+    client: httpx.AsyncClient,
+) -> None:
+    """A settled invoice is not re-inquired, and no nonce is spent on it."""
+    await _submit(client)
+    first = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert first["checked"] == 1
+
+    second = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert second["checked"] == 0
+    assert second["records"] == []
+
+
+async def test_a_draft_is_never_inquired_about(client: httpx.AsyncClient) -> None:
+    await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": valid_invoice()})
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert outcome["checked"] == 0
+
+
+async def test_inquiring_a_single_invoice_by_id(client: httpx.AsyncClient) -> None:
+    submitted = await _submit(client)
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/{submitted['id']}/inquire"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["state"] == "confirmed"
+
+
+async def test_inquiring_a_draft_by_id_is_refused(client: httpx.AsyncClient) -> None:
+    created = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": valid_invoice()})
+    ).json()
+    response = await client.post(f"/api/profiles/{PROFILE}/invoices/{created['id']}/inquire")
+    assert response.status_code == 400
+
+
+async def test_inquiry_is_scoped_to_the_selected_profile(client: httpx.AsyncClient) -> None:
+    """Another profile's invoice is not reachable through this one."""
+    submitted = await _submit(client)
+    await client.post(
+        "/api/profiles",
+        json={"name": "دیگر", "memory_id": "B22327", "environment": "production"},
+    )
+    response = await client.post(f"/api/profiles/دیگر/invoices/{submitted['id']}/inquire")
+    assert response.status_code == 404
+
+
+async def test_a_confirmed_cancellation_marks_the_original_cancelled(
+    client: httpx.AsyncClient,
+) -> None:
+    """ابطالی is an ordinary invoice, so the void is only known once it confirms.
+
+    RC_IITP §5-3: no separate endpoint — ``ins=3`` plus the original's شماره
+    منحصر به فرد مالیاتی in ``irtaxid``. Until that invoice is itself confirmed,
+    the original is not void.
+    """
+    original = await _submit(client)
+    await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")
+    assert (await _record(client, original["id"]))["state"] == "confirmed"
+
+    cancellation = valid_invoice()
+    cancellation["header"]["taxid"] = ""
+    cancellation["header"]["ins"] = 3
+    cancellation["header"]["irtaxid"] = original["taxId"]
+    voiding = await _submit(client, cancellation)
+
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    assert outcome["records"][0]["cancelledTaxId"] == original["taxId"]
+
+    assert (await _record(client, original["id"]))["state"] == "cancelled"
+    assert (await _record(client, voiding["id"]))["state"] == "confirmed"
+
+
+async def test_inquiry_requires_a_session(anonymous: httpx.AsyncClient) -> None:
+    assert (await anonymous.post(f"/api/profiles/{PROFILE}/invoices/inquire")).status_code == 401

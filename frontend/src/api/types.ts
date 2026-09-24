@@ -155,6 +155,51 @@ export interface VerifyResult {
   patternName: string
   errors: VerifyIssue[]
   warnings: VerifyIssue[]
+  /** The organization's answer, once استعلام has been run. Absent until then. */
+  inquiry?: InquiryDetail
+  /** Set on an invoice a confirmed ابطالی voided. */
+  cancelledBy?: { id: number; taxId: string | null; at: string }
+}
+
+/** One error code from the tax service. Not a VerifyIssue: this one carries no
+ *  field, no clause citation and no expected/actual — only the code and text
+ *  the organization returned. */
+export interface TaxIssue {
+  code: string
+  message: string
+  errorType?: string | null
+}
+
+export interface InquiryDetail {
+  status: RequestStatus | string | null
+  checkedAt: string
+  referenceNumber: string | null
+  uid: string | null
+  errors: TaxIssue[]
+  warnings: TaxIssue[]
+}
+
+export type RequestStatus =
+  | 'IN_PROGRESS'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'TIMEOUT'
+  | 'NOT_FOUND'
+
+export interface InquiredRecord {
+  id: number
+  taxId: string | null
+  referenceNumber: string | null
+  previousState: InvoiceState
+  state: InvoiceState
+  inquiry: InquiryDetail
+  cancelledTaxId: string | null
+}
+
+export interface InquiryOutcome {
+  checked: number
+  updated: number
+  records: InquiredRecord[]
 }
 
 export type InvoiceState =

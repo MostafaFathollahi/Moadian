@@ -35,7 +35,13 @@ try:  # POSIX only; Windows has no flock and falls back to the in-process lock.
 except ImportError:  # pragma: no cover - not exercised on the supported platforms
     fcntl = None  # type: ignore[assignment]
 
-__all__ = ["MAX_PACKETS", "InvoicePipeline", "InvoiceSubmission", "MonotonicSerialCounter"]
+__all__ = [
+    "MAX_INQUIRY_IDS",
+    "MAX_PACKETS",
+    "InvoicePipeline",
+    "InvoiceSubmission",
+    "MonotonicSerialCounter",
+]
 
 #: `GET /inquiry-by-reference-id` refuses more than 100 ids per call (error 4141).
 MAX_INQUIRY_IDS = 100

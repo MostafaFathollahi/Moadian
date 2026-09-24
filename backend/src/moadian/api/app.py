@@ -40,8 +40,8 @@ from moadian.errors import (
     TaxApiError,
     TransportError,
 )
-from moadian.models import Invoice, RequestStatus
-from moadian.pipeline import InvoicePipeline, MonotonicSerialCounter
+from moadian.models import InquiryResult, Invoice, RequestStatus
+from moadian.pipeline import MAX_INQUIRY_IDS, InvoicePipeline, MonotonicSerialCounter
 from moadian.rules import RuleEngine, load_rules, recompute
 from moadian.store import Buyer, GoodsService, InvoiceRecord, InvoiceState, RecordStore
 
@@ -167,6 +167,144 @@ def _report_signing_material(settings: Settings) -> None:
             )
         else:
             _log.warning("signing material for %s: %s", environment, report["message"])
+
+
+#: The only two inquiry statuses that are a verdict.
+#:
+#: ``IN_PROGRESS`` is the ordinary answer for the first stretch after submission.
+#: ``TIMEOUT`` and ``NOT_FOUND`` mean the organization has not answered — not
+#: that it answered no — and RC_TICS §8 is explicit that the response to either
+#: is to inquire again later, never to resubmit. Moving a record out of ``SENT``
+#: on any of the three would tell the operator a queued invoice was finished.
+_VERDICTS: dict[str, str] = {
+    RequestStatus.SUCCESS: InvoiceState.CONFIRMED,
+    RequestStatus.FAILED: InvoiceState.REJECTED,
+}
+
+
+def _inquiry_block(result: InquiryResult) -> dict[str, Any]:
+    """The organization's answer about one submission, flattened for storage.
+
+    Stored under ``detail["inquiry"]`` rather than replacing ``detail``: that key
+    holds our own اعتبارسنجی report, and an operator comparing what we predicted
+    against what the organization said needs both. ``data`` is ``{}`` until the
+    packet has been processed, so the error lists are normally empty.
+    """
+    data: Any = result.data
+    if hasattr(data, "model_dump"):
+        data = data.model_dump(exclude_none=True)
+    if not isinstance(data, dict):
+        data = {}
+    status = result.status.value if isinstance(result.status, RequestStatus) else result.status
+    return {
+        "status": status,
+        "checkedAt": datetime.now(UTC).isoformat(timespec="seconds"),
+        "referenceNumber": result.referenceNumber,
+        "uid": result.uid,
+        # Named `error`/`warning` on the wire, singular. Pluralised here to match
+        # the verification report beside it, so the UI renders one shape.
+        "errors": list(data.get("error") or []),
+        "warnings": list(data.get("warning") or []),
+    }
+
+
+def _apply_cancellation(
+    record: InvoiceRecord, profile: Profile, store: RecordStore
+) -> str | None:
+    """Mark the invoice a confirmed ابطالی voids, and return its tax id.
+
+    An ابطالی is not its own API call — it is an ordinary invoice carrying
+    ``ins=3`` and the voided invoice's شماره منحصر به فرد مالیاتی in ``irtaxid``
+    (RC_IITP §5-3). So the only moment the original can be known to be void is
+    when the ابطالی itself is confirmed, which is here.
+    """
+    header = record.payload.get("header") or {}
+    if header.get("ins") != 3:
+        return None
+    reference = header.get("irtaxid")
+    if not reference:
+        return None
+    target = store.find_by_tax_id(profile.name, str(reference))
+    if target is None or target.id == record.id or target.state == InvoiceState.CANCELLED:
+        return None
+    target.state = InvoiceState.CANCELLED
+    detail = dict(target.detail or {})
+    detail["cancelledBy"] = {
+        "id": record.id,
+        "taxId": record.tax_id,
+        "at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    target.detail = detail
+    store.save_invoice(target)
+    return str(reference)
+
+
+async def _reconcile(
+    records: list[InvoiceRecord],
+    profile: Profile,
+    settings: Settings,
+    store: RecordStore,
+) -> dict[str, Any]:
+    """Inquire on accepted submissions and write the verdicts back.
+
+    The second half of filing an invoice. `POST /invoice` only says the packet
+    was *accepted*; the organization validates asynchronously and the outcome
+    exists nowhere until `GET /inquiry-by-reference-id` is asked for it. Without
+    this, every invoice stays ``SENT`` forever and a rejection is invisible.
+
+    Batched at :data:`MAX_INQUIRY_IDS` per request — more is error 4141 — and
+    matched on ``referenceNumber`` because the response need not be in order.
+    """
+    pending = [r for r in records if r.reference_number]
+    if not pending:
+        return {"checked": 0, "updated": 0, "records": []}
+
+    by_reference: dict[str, InquiryResult] = {}
+    async with _client_for(profile, settings) as client:
+        for start in range(0, len(pending), MAX_INQUIRY_IDS):
+            chunk = pending[start : start + MAX_INQUIRY_IDS]
+            results = await client.inquiry_by_reference_id(
+                [str(r.reference_number) for r in chunk]
+            )
+            for result in results:
+                if result.referenceNumber:
+                    by_reference[result.referenceNumber] = result
+
+    reported: list[dict[str, Any]] = []
+    updated = 0
+    for record in pending:
+        result = by_reference.get(str(record.reference_number))
+        if result is None:
+            # Asked about, not answered about. Left exactly as it was.
+            continue
+        block = _inquiry_block(result)
+        previous = record.state
+        detail = dict(record.detail or {})
+        detail["inquiry"] = block
+        record.detail = detail
+        verdict = _VERDICTS.get(block["status"] or "")
+        if verdict:
+            record.state = verdict
+        store.save_invoice(record)
+        cancelled = (
+            _apply_cancellation(record, profile, store)
+            if record.state == InvoiceState.CONFIRMED
+            else None
+        )
+        if record.state != previous:
+            updated += 1
+        reported.append(
+            {
+                "id": record.id,
+                "taxId": record.tax_id,
+                "referenceNumber": record.reference_number,
+                "previousState": previous,
+                "state": record.state,
+                "inquiry": block,
+                "cancelledTaxId": cancelled,
+            }
+        )
+    return {"checked": len(pending), "updated": updated, "records": reported}
 
 
 def _pipeline_for(
@@ -603,6 +741,54 @@ def create_app(
             "uid": submission.uid,
             "referenceNumber": submission.reference_number,
         }
+
+    @app.post(
+        "/api/profiles/{name}/invoices/inquire",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    async def inquire_pending(
+        profile: ActiveProfile,
+        settings: Annotated[Settings, Depends(get_settings)],
+        store: Annotated[RecordStore, Depends(get_record_store)],
+        limit: int = 500,
+    ):
+        """استعلام وضعیت — ask about every invoice still awaiting a verdict.
+
+        The companion to ``/submit``. Submission ends at ``SENT``; this is what
+        turns that into ``CONFIRMED`` or ``REJECTED``.
+
+        Safe to call as often as the operator likes, but not sooner than ten
+        seconds after a submission (RC_TICS §8) — before that the answer is
+        ``IN_PROGRESS`` and the nonce is spent for nothing.
+        """
+        return await _reconcile(store.list_awaiting_inquiry(profile.name, limit), profile,
+                                settings, store)
+
+    @app.post(
+        "/api/profiles/{name}/invoices/{invoice_id}/inquire",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    async def inquire_one(
+        profile: ActiveProfile,
+        invoice_id: int,
+        settings: Annotated[Settings, Depends(get_settings)],
+        store: Annotated[RecordStore, Depends(get_record_store)],
+    ):
+        """استعلام وضعیت for a single record."""
+        record = store.get_invoice(invoice_id)
+        if record is None or record.profile != profile.name:
+            raise HTTPException(404, "صورتحساب یافت نشد")
+        if not record.reference_number:
+            raise HTTPException(
+                400,
+                "این صورتحساب شماره پیگیری ندارد؛ تنها صورتحساب پذیرفته‌شده قابل استعلام است.",
+            )
+        outcome = await _reconcile([record], profile, settings, store)
+        if not outcome["records"]:
+            raise HTTPException(502, "سامانه پاسخی برای این شماره پیگیری بازنگرداند.")
+        return outcome["records"][0]
 
     @app.post(
         "/api/profiles/{name}/invoices/{invoice_id}/referring",
