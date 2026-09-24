@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api, ApiError } from '../../api/client'
 import type { CatalogueEntry, GoodsService } from '../../api/types'
 
@@ -43,6 +44,35 @@ export function StuffPicker({
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  // The panel is portalled to <body> and positioned in viewport coordinates.
+  //
+  // It cannot simply be absolutely positioned inside the cell: this control sits
+  // in the invoice lines table, which lives in a `.scroll-x` wrapper with
+  // `overflow-x: auto`, and an ancestor with overflow clips absolutely
+  // positioned descendants however deep they are. Inline, the panel was cut off
+  // at the table's edge *and* widened its scroll region, which pushed the شرح
+  // column out of view — the field looked as though it had been removed.
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchor(null)
+      return
+    }
+    const place = () => {
+      const rect = box.current?.getBoundingClientRect()
+      if (rect) setAnchor({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
+    place()
+    // `true` for the capture phase: the table scrolls, not the window, so a
+    // listener on window alone never fires and the panel detaches from its input.
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open])
 
   // Favourites filter locally: they are already in memory and a round trip per
   // keystroke for a list of twenty would only add latency.
@@ -78,7 +108,13 @@ export function StuffPicker({
   useEffect(() => {
     if (!open) return
     function onDown(event: MouseEvent) {
-      if (!box.current?.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      // The panel is portalled, so it is not inside `box` any more — a plain
+      // contains() check would treat every click on a result as "outside" and
+      // close the list before the click landed.
+      if (box.current?.contains(target)) return
+      if ((target as Element)?.closest?.('.picker-panel')) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
@@ -121,11 +157,21 @@ export function StuffPicker({
             setOpen(false)
           }
         }}
-        style={{ minWidth: 190, borderColor: invalid ? 'var(--danger)' : undefined }}
+        style={{ minWidth: 150, borderColor: invalid ? 'var(--danger)' : undefined }}
       />
 
-      {open && (
-        <div className="picker-panel">
+      {open && anchor && createPortal(
+        <div
+          className="picker-panel"
+          // Kept off the input's own width so a 340px panel is readable under a
+          // narrow table column, while never spilling past the viewport edge.
+          style={{
+            top: anchor.top,
+            left: Math.max(8, Math.min(anchor.left, window.innerWidth - 360)),
+            minWidth: Math.max(anchor.width, 320),
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
           {matchingFavourites.length > 0 && (
             <>
               <div className="picker-head">مورد‌های من</div>
@@ -198,7 +244,8 @@ export function StuffPicker({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

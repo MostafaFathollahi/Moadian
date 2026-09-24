@@ -241,6 +241,24 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
             />
           </Field>
 
+          {/* Read-only for the same reason the taxid is: inno is the same serial
+              rendered as 10 hex digits, drawn from the same persisted counter at
+              the same moment. Typing one here would either duplicate a serial or
+              disagree with the taxid that embeds it. */}
+          <Field
+            label="سریال صورتحساب"
+            hint="سریال داخلی حافظه مالیاتی — همان سریالی که در شماره مالیاتی به کار می‌رود."
+          >
+            <input
+              className="ltr"
+              value={invoice.header.inno ?? ''}
+              readOnly
+              tabIndex={-1}
+              placeholder="— هنگام ارسال ساخته می‌شود —"
+              style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
+            />
+          </Field>
+
           <div className="grid cols-2">
             <Field
               label="تاریخ صدور صورتحساب"
@@ -466,7 +484,11 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
                     <input
                       value={line.sstt ?? ''}
                       onChange={(e) => patchLine(index, { sstt: e.target.value })}
-                      style={{ minWidth: 150 }}
+                      // Filled in from whichever list the code was picked from,
+                      // and editable after: the catalogue's شرح is often a long
+                      // classification path where the invoice wants the plain
+                      // name of what was sold.
+                      style={{ minWidth: 220 }}
                     />
                   </td>
                   <td>
