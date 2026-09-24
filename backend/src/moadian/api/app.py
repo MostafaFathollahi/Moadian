@@ -821,6 +821,40 @@ def create_app(
         store.save_invoice(record)
         return {"id": record.id, "state": record.state, "verification": report.as_dict()}
 
+    @app.delete(
+        "/api/profiles/{name}/invoices/{invoice_id}",
+        status_code=204,
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    def delete_invoice(
+        profile: ActiveProfile,
+        invoice_id: int,
+        store: Annotated[RecordStore, Depends(get_record_store)],
+    ):
+        """Discard a draft.
+
+        **Only DRAFT and INVALID, same as editing.** Once an invoice has been
+        accepted by `POST /invoice` it exists in the organization's records
+        whether or not it exists in ours, and deleting our copy would destroy the
+        شماره پیگیری that is the only way to ask what became of it — along with
+        the payload an اصلاحی would have to reference. An invoice that should not
+        stand is withdrawn with an ابطالی, which is a new filing, not a deletion.
+
+        A spent serial is not reclaimed either way. The counter only moves
+        forward, which is what keeps tax ids unique.
+        """
+        record = store.get_invoice(invoice_id)
+        if record is None or record.profile != profile.name:
+            raise HTTPException(404, "صورتحساب یافت نشد")
+        if record.state not in (InvoiceState.DRAFT, InvoiceState.INVALID):
+            raise HTTPException(
+                409,
+                "تنها پیش‌نویس قابل حذف است. صورتحساب ارسال‌شده در سامانه ثبت شده "
+                "است؛ برای بی‌اعتبار کردن آن صورتحساب ابطالی صادر کنید.",
+            )
+        store.delete_invoice(invoice_id)
+
     @app.post("/api/profiles/{name}/invoices/submit", tags=["invoices"], dependencies=AUTHENTICATED)
     async def submit_invoice(
         profile: ActiveProfile,

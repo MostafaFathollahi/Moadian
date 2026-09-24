@@ -33,6 +33,7 @@ export function SubmissionsPage({
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filter, setFilter] = useState<string>('')
   const [inquiring, setInquiring] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
 
   const load = useCallback(() => {
     setRecords(null)
@@ -71,6 +72,28 @@ export function SubmissionsPage({
       setInquiring(false)
     }
   }, [profile.name, load])
+
+  const remove = useCallback(
+    async (record: InvoiceRecord) => {
+      const amount = money(record.payload?.header?.tbill)
+      // Confirmed because it cannot be undone and the rows look alike; naming the
+      // amount is what distinguishes this draft from the one above it.
+      if (!window.confirm(`پیش‌نویس ${record.id} به مبلغ ${amount} ریال حذف شود؟`)) return
+      setDeleting(record.id)
+      setError(null)
+      setNotice(null)
+      try {
+        await api.deleteInvoice(profile.name, record.id)
+        setNotice(`پیش‌نویس ${record.id} حذف شد.`)
+        load()
+      } catch (cause) {
+        setError(cause instanceof ApiError ? cause.message : String(cause))
+      } finally {
+        setDeleting(null)
+      }
+    },
+    [profile.name, load],
+  )
 
   return (
     <>
@@ -147,7 +170,7 @@ export function SubmissionsPage({
                                 record of what was actually signed, and the API
                                 refuses to rewrite it — offering the button would
                                 be a promise the server will not keep. */}
-                            {onEdit && (record.state === 'draft' || record.state === 'invalid') && (
+                            {onEdit && editable(record.state) && (
                               <button className="btn ghost" onClick={() => onEdit(record.id)}>
                                 ویرایش
                               </button>
@@ -160,6 +183,20 @@ export function SubmissionsPage({
                                 }
                               >
                                 {expanded === record.id ? 'بستن' : 'جزئیات'}
+                              </button>
+                            )}
+                            {/* Drafts only, like ویرایش. A sent invoice exists in
+                                the organization's records whether or not it
+                                exists here, and dropping our row would lose the
+                                شماره پیگیری that is the only way to ask what
+                                became of it. */}
+                            {editable(record.state) && (
+                              <button
+                                className="btn ghost danger"
+                                onClick={() => remove(record)}
+                                disabled={deleting === record.id}
+                              >
+                                {deleting === record.id ? '…' : 'حذف'}
                               </button>
                             )}
                           </div>
@@ -245,4 +282,12 @@ function InquiryPanel({ inquiry }: { inquiry: InquiryDetail }) {
       )}
     </div>
   )
+}
+
+/** Which states may be edited or discarded.
+ *
+ * The server is the authority — it answers 409 for anything else — and this
+ * mirrors it so the UI never offers a button the server will refuse. */
+function editable(state: InvoiceRecord['state']): boolean {
+  return state === 'draft' || state === 'invalid'
 }

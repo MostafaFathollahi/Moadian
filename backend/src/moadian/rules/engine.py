@@ -34,6 +34,12 @@ __all__ = ["RuleEngine"]
 DEFAULT_PATTERN = 1
 
 
+#: Maximum length of شرح کالا/خدمت, RC_IITP §8-28، جدول ۳۰. The field is
+#: optional, free text, and the spec records "در حال حاضر قاعده‌ای ندارد" for its
+#: content — the length is the only constraint on it.
+MAX_SSTT_LENGTH = 400
+
+
 class RuleEngine:
     """Checks invoices against the transcribed portion of RC_IITP."""
 
@@ -88,8 +94,45 @@ class RuleEngine:
                 )
 
         violations.extend(self._check_enums(invoice))
+        violations.extend(self._check_lengths(invoice))
         violations.extend(check_arithmetic(invoice, pattern_number))
         return ValidationReport(tuple(violations))
+
+    # -- declared field lengths -------------------------------------------
+
+    def _check_lengths(self, invoice: Invoice) -> list[Violation]:
+        """Text fields longer than RC_IITP declares them.
+
+        Only ``sstt`` so far, and it earns the check on its own: the field is
+        capped at 400 characters (§8-28، جدول ۳۰) and the organization's own
+        published catalogue contains 13 current entries whose شرح runs past that,
+        the longest at 625. Filling the invoice line from a catalogue row — which
+        is exactly what the code picker does — can therefore produce an invoice
+        that is refused, for a reason invisible on the screen that produced it.
+
+        Deliberately not a general framework. The spec declares a length for
+        every field, but the YAML matrix carries none of them, and transcribing
+        sixty-odd limits out of a PDF is a large and error-prone job to do
+        speculatively. This is the one where a real catalogue meets a real cap.
+        """
+        violations: list[Violation] = []
+        for index, item in enumerate(invoice.body):
+            if item.sstt is not None and len(item.sstt) > MAX_SSTT_LENGTH:
+                violations.append(
+                    Violation(
+                        field="sstt",
+                        rule="length.sstt",
+                        message=(
+                            f"شرح کالا/خدمت حداکثر {MAX_SSTT_LENGTH} نویسه است؛ "
+                            f"{len(item.sstt)} نویسه وارد شده. آن را کوتاه کنید."
+                        ),
+                        reference="RC_IITP §8-28، جدول ۳۰",
+                        expected=float(MAX_SSTT_LENGTH),
+                        actual=float(len(item.sstt)),
+                        line=index,
+                    )
+                )
+        return violations
 
     # -- obligations ------------------------------------------------------
 

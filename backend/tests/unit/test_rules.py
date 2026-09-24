@@ -596,3 +596,89 @@ def test_other_patterns_do_not_demand_shipped_goods() -> None:
     """الگوی اول has no bill of lading, so an empty sg must not be an error."""
     report = RuleEngine().validate(documented_invoice(inp=1))
     assert not any(v.field.startswith("sg.") for v in report.violations)
+
+
+# ------------------------------------------------- شرح کالا/خدمت length (§8-28)
+
+
+def _line(**over):
+    line = {
+        "sstid": "2710000138624", "sstt": "سرسیلندر", "mu": "164", "am": 2,
+        "fee": 10000, "prdis": 20000, "dis": 500, "adis": 19500, "vra": 9,
+        "vam": 1755, "tsstam": 21255,
+    }
+    line.update(over)
+    return line
+
+
+def _invoice(*lines):
+    return Invoice.model_validate({
+        "header": {
+            "taxid": "", "indatim": 1683997837988, "inty": 1, "inp": 1, "ins": 1,
+            "tins": "14003778990", "tob": 2, "tprdis": 20000 * len(lines),
+            "tdis": 500 * len(lines), "tadis": 19500 * len(lines),
+            "tvam": 1755 * len(lines), "todam": 0, "tbill": 21255 * len(lines),
+            "setm": 1,
+        },
+        "body": list(lines),
+    })
+
+
+def _sstt_errors(invoice):
+    return [v for v in RuleEngine().validate(invoice).violations if v.rule == "length.sstt"]
+
+
+def test_a_400_character_description_is_accepted():
+    """The cap is inclusive; 400 is legal."""
+    assert _sstt_errors(_invoice(_line(sstt="ا" * 400))) == []
+
+
+def test_a_401_character_description_is_rejected():
+    violations = _sstt_errors(_invoice(_line(sstt="ا" * 401)))
+    assert len(violations) == 1
+    assert violations[0].expected == 400
+    assert violations[0].actual == 401
+    assert violations[0].line == 0
+    assert "RC_IITP" in violations[0].reference
+
+
+def test_the_longest_real_catalogue_description_is_caught():
+    """The organization's own services export contains 13 current entries whose
+    شرح exceeds 400 characters, the longest at 625. Filling an invoice line from
+    one of those unmodified builds an invoice that is refused — so the check has
+    to fire on real data, not only on a synthetic string."""
+    violations = _sstt_errors(_invoice(_line(sstt="ا" * 625)))
+    assert len(violations) == 1
+    assert violations[0].actual == 625
+
+
+def test_the_offending_line_is_identified():
+    """With several lines, "too long" is useless without saying which one."""
+    violations = _sstt_errors(
+        _invoice(_line(sstt="کوتاه"), _line(sstt="ا" * 500), _line(sstt="ا" * 600))
+    )
+    assert [v.line for v in violations] == [1, 2]
+
+
+def test_an_absent_description_is_not_a_length_error():
+    """sstt is optional — §8-28 says اختیاری, and the spec records no content rule."""
+    assert _sstt_errors(_invoice(_line(sstt=None))) == []
+    assert _sstt_errors(_invoice(_line(sstt=""))) == []
+
+
+def test_two_lines_may_carry_different_descriptions_for_the_same_code():
+    """What the operator actually asked about.
+
+    §8-28 defines sstt as "عنوان هر قلم کالا/خدمت در صورتحساب" — the title of the
+    line *in the invoice* — and records "در حال حاضر قاعده‌ای ندارد" for its
+    content. Nothing ties it to the catalogue's شرح for that شناسه, so the same
+    code may be described differently on different lines and on different
+    invoices.
+    """
+    invoice = _invoice(
+        _line(sstid="2720000114542", sstt="پشتیبانی سالانه — قرارداد الف"),
+        _line(sstid="2720000114542", sstt="پشتیبانی سالانه — قرارداد ب"),
+    )
+    report = RuleEngine().validate(invoice)
+    assert [v for v in report.violations if v.field == "sstt"] == []
+    assert [v for v in report.violations if v.field == "sstid"] == []

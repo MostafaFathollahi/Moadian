@@ -1159,3 +1159,83 @@ async def test_editing_requires_a_session(anonymous: httpx.AsyncClient) -> None:
     assert (
         await anonymous.put(f"/api/profiles/{PROFILE}/invoices/1", json={"invoice": form_invoice()})
     ).status_code == 401
+
+
+# ------------------------------------------------------------ deleting a draft
+
+
+async def test_a_draft_can_be_deleted(client: httpx.AsyncClient) -> None:
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    response = await client.delete(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")
+    assert response.status_code == 204, response.text
+    assert (await client.get(f"/api/profiles/{PROFILE}/invoices")).json() == []
+    assert (await client.get(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")).status_code == 404
+
+
+async def test_an_invalid_draft_can_be_deleted(client: httpx.AsyncClient) -> None:
+    """A draft saved with errors is the one most likely to be thrown away."""
+    broken = form_invoice()
+    broken["header"]["tbill"] = 999999
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": broken})
+    ).json()
+    assert saved["state"] == "invalid"
+    assert (
+        await client.delete(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")
+    ).status_code == 204
+
+
+async def test_a_sent_invoice_cannot_be_deleted(client: httpx.AsyncClient) -> None:
+    """It exists in the organization's records whether or not it exists in ours.
+
+    Deleting our copy would destroy the شماره پیگیری that is the only way to ask
+    what became of it, and the payload an اصلاحی would have to reference. Such an
+    invoice is withdrawn with an ابطالی — a new filing, not a deletion.
+    """
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+    response = await client.delete(f"/api/profiles/{PROFILE}/invoices/{sent['id']}")
+    assert response.status_code == 409, response.text
+
+    still_there = (await client.get(f"/api/profiles/{PROFILE}/invoices/{sent['id']}")).json()
+    assert still_there["state"] == "sent"
+    assert still_there["reference_number"] == sent["referenceNumber"]
+
+
+async def test_a_confirmed_invoice_cannot_be_deleted(client: httpx.AsyncClient) -> None:
+    """The strongest case: the organization has registered it in the کارپوشه."""
+    await client.post(f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()})
+    outcome = (await client.post(f"/api/profiles/{PROFILE}/invoices/inquire")).json()
+    invoice_id = outcome["records"][0]["id"]
+    assert outcome["records"][0]["state"] == "confirmed"
+
+    assert (
+        await client.delete(f"/api/profiles/{PROFILE}/invoices/{invoice_id}")
+    ).status_code == 409
+
+
+async def test_deleting_an_unknown_invoice_is_404(client: httpx.AsyncClient) -> None:
+    assert (await client.delete(f"/api/profiles/{PROFILE}/invoices/9999")).status_code == 404
+
+
+async def test_another_profiles_draft_cannot_be_deleted(client: httpx.AsyncClient) -> None:
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    await client.post(
+        "/api/profiles",
+        json={"name": "دیگر", "memory_id": "B22327", "environment": "production"},
+    )
+    assert (
+        await client.delete(f"/api/profiles/دیگر/invoices/{saved['id']}")
+    ).status_code == 404
+    assert (await client.get(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")).status_code == 200
+
+
+async def test_deleting_requires_a_session(anonymous: httpx.AsyncClient) -> None:
+    assert (await anonymous.delete(f"/api/profiles/{PROFILE}/invoices/1")).status_code == 401

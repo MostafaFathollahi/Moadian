@@ -374,6 +374,11 @@ td.numeric, th.numeric { text-align: end; font-variant-numeric: tabular-nums; }
 
 .rtl { direction: rtl; unicode-bidi: isolate; }
 
+/* Destructive, and irreversible for a draft — coloured so it is not the
+   button someone hits by reflex while reaching for جزئیات. */
+.btn.ghost.danger { color: var(--danger); }
+.btn.ghost.danger:hover { background: var(--danger-soft); }
+
 .empty { color: var(--muted); text-align: center; padding: 28px 12px; font-size: 13px; }
 
 .muted { color: var(--muted); }

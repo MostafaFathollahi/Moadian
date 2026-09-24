@@ -220,6 +220,9 @@ export const api = {
       `/api/profiles/${encode(profile)}/invoices/${id}`,
       { method: 'PUT', body: JSON.stringify({ invoice }) },
     ),
+  /** Discard a draft. Refused by the server for anything already sent. */
+  deleteInvoice: (profile: string, id: number) =>
+    request<void>(`/api/profiles/${encode(profile)}/invoices/${id}`, { method: 'DELETE' }),
   invoices: (profile: string, state?: string) =>
     request<InvoiceRecord[]>(
       `/api/profiles/${encode(profile)}/invoices${state ? `?state=${encode(state)}` : ''}`,

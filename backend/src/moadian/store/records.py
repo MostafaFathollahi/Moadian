@@ -497,6 +497,13 @@ class RecordStore:
             row = cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
         return self._invoice(row) if row else None
 
+    def delete_invoice(self, invoice_id: int) -> None:
+        """Remove one record. Callers enforce which states may be removed."""
+        with self._write() as cursor:
+            cursor.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
+            if cursor.rowcount == 0:
+                raise ConfigurationError(f"no invoice {invoice_id}")
+
     def counts_by_state(self, profile: str) -> dict[str, int]:
         """What the dashboard cards show. Every state present, zeros included.
 

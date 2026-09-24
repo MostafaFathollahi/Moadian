@@ -18,6 +18,10 @@ import { IssueList } from './IssueList'
 
 /** Blank line. Only the fields an operator types — everything derived comes
  *  back from the server's recompute, which owns the §8 formulas. */
+/** شرح کالا/خدمت, RC_IITP §8-28، جدول ۳۰. The field is optional free text and
+ *  the spec records no content rule for it; length is the only constraint. */
+const MAX_SSTT = 400
+
 const BLANK_LINE: InvoiceLine = { sstid: '', sstt: '', mu: '', am: 1, fee: 0, dis: 0, vra: 9 }
 
 function emptyInvoice(): InvoicePayload {
@@ -104,6 +108,27 @@ export function InvoiceEntry({
     void api.patternFields(pattern, invoiceType).then(setRules).catch(() => setRules(null))
   }, [pattern, invoiceType])
 
+  // شماره اقتصادی فروشنده comes from the certificate that will sign the invoice.
+  //
+  // It is not really a free field: the organization checks that the seller's
+  // شماره اقتصادی matches the identity in the signing certificate, so any value
+  // other than the one in the certificate is a rejection. The certificate's
+  // subject serialNumber (2.5.4.5) is that identity, and the profile's own
+  // economic_code stands in when the certificate cannot be read — a profile
+  // whose certificate has gone missing must still let an invoice be drafted.
+  //
+  // Only ever fills a blank. Typing over it is allowed, because a taxpayer
+  // filing on behalf of another has a reason to.
+  useEffect(() => {
+    const fromCertificate = profile.certificate?.national_id ?? profile.economic_code
+    if (!fromCertificate) return
+    setInvoice((current) =>
+      current.header.tins
+        ? current
+        : { ...current, header: { ...current.header, tins: fromCertificate } },
+    )
+  }, [profile.certificate?.national_id, profile.economic_code])
+
   // A goods catalogue entry marked default pre-fills the first line.
   useEffect(() => {
     const fallback = goods.find((g) => g.is_default)
@@ -115,7 +140,7 @@ export function InvoiceEntry({
       body[0] = {
         ...first,
         sstid: fallback.stuff_id,
-        sstt: fallback.description,
+        sstt: fallback.description.slice(0, MAX_SSTT),
         mu: fallback.unit ?? '',
         vra: fallback.vat_rate ?? first.vra,
         fee: fallback.default_fee ?? first.fee,
@@ -535,7 +560,15 @@ export function InvoiceEntry({
                       onPick={(pick) =>
                         patchLine(index, {
                           sstid: pick.stuffId,
-                          sstt: pick.description,
+                          // Capped: شرح کالا/خدمت is limited to 400 characters
+                          // (RC_IITP §8-28) and 13 current catalogue entries run
+                          // past it, the longest at 625. Filling the line
+                          // unmodified would build an invoice the organization
+                          // refuses. Trimmed rather than refused, because the
+                          // first 400 characters of a classification path are
+                          // still the useful part and the operator edits it
+                          // anyway.
+                          sstt: pick.description.slice(0, MAX_SSTT),
                           // A catalogue row carries no unit or price — only the
                           // operator's own entry does — so those hold whatever
                           // the line already had rather than being cleared.
@@ -550,6 +583,8 @@ export function InvoiceEntry({
                   <td>
                     <input
                       value={line.sstt ?? ''}
+                      maxLength={MAX_SSTT}
+                      title={`شرح کالا/خدمت — حداکثر ${MAX_SSTT} نویسه`}
                       onChange={(e) => patchLine(index, { sstt: e.target.value })}
                       // Filled in from whichever list the code was picked from,
                       // and editable after: the catalogue's شرح is often a long
