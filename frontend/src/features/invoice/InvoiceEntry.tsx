@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import type {
   Buyer,
@@ -22,7 +22,13 @@ const BLANK_LINE: InvoiceLine = { sstid: '', sstt: '', mu: '', am: 1, fee: 0, di
 
 function emptyInvoice(): InvoicePayload {
   return {
-    header: { inty: 1, inp: 1, ins: 1, setm: 2, indatim: Date.now() },
+    // setm 1 = نقدی. The common case by a wide margin, and 3 (نقدی/نسیه) is the
+  // only value that demands extra fields, so it should never be the default.
+  // indatim  تاریخ و زمان صدور — editable, and the one the tax id's day range
+  //          is derived from (in Asia/Tehran, server side).
+  // indati2m تاریخ و زمان ایجاد — when this draft was started. Stamped once and
+  //          never touched again, which is the whole point of recording it.
+  header: { inty: 1, inp: 1, ins: 1, setm: 1, indatim: Date.now(), indati2m: Date.now() },
     body: [{ ...BLANK_LINE }],
     payments: [],
   }
@@ -210,6 +216,57 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
 
       <div className="grid cols-2">
         <Card title="سرآمد صورتحساب">
+          {/* Read-only, and shown precisely because it is not yours to fill.
+              The شماره منحصر به فرد مالیاتی encodes the fiscal memory, the issue
+              date and a serial that must never repeat, so it is derived from the
+              persisted counter at the moment of sending. An empty box here is
+              the correct state for an invoice that has not been sent, and saying
+              so beats leaving the field out and having the operator wonder where
+              the number went. */}
+          <Field
+            label="شماره منحصر به فرد مالیاتی"
+            hint={
+              invoice.header.taxid
+                ? 'در زمان ارسال توسط برنامه ساخته شد.'
+                : 'هنگام ارسال به‌طور خودکار ساخته می‌شود؛ قابل ویرایش نیست.'
+            }
+          >
+            <input
+              className="ltr"
+              value={invoice.header.taxid ?? ''}
+              readOnly
+              tabIndex={-1}
+              placeholder="— هنگام ارسال ساخته می‌شود —"
+              style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
+            />
+          </Field>
+
+          <div className="grid cols-2">
+            <Field
+              label="تاریخ صدور صورتحساب"
+              required
+              error={issuesByField.get('indatim')}
+              hint={jalali(invoice.header.indatim)}
+            >
+              <input
+                type="date"
+                className="ltr"
+                value={toDateInput(invoice.header.indatim)}
+                onChange={(e) => patch({ indatim: fromDateInput(e.target.value, invoice.header.indatim) })}
+              />
+            </Field>
+
+            <Field label="تاریخ ایجاد" hint={jalali(invoice.header.indati2m)}>
+              <input
+                className="ltr"
+                value={toDateInput(invoice.header.indati2m)}
+                readOnly
+                tabIndex={-1}
+                style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}
+              />
+            </Field>
+          </div>
+
           <Field label="الگوی صورتحساب" required>
             <select value={pattern} onChange={(e) => patch({ inp: Number(e.target.value) })}>
               {patterns.map((p) => (
@@ -310,7 +367,7 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
 
           <Field label="روش تسویه" required={ruleFor('header', 'setm')?.obligation === 'required'}
                  error={issuesByField.get('setm')}>
-            <select value={invoice.header.setm ?? 2} onChange={(e) => patch({ setm: Number(e.target.value) })}>
+            <select value={invoice.header.setm ?? 1} onChange={(e) => patch({ setm: Number(e.target.value) })}>
               <option value={1}>نقدی</option>
               <option value={2}>نسیه</option>
               <option value={3}>نقدی/نسیه</option>
@@ -420,8 +477,8 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
                     />
                   </td>
                   <NumberCell value={line.am} onChange={(v) => patchLine(index, { am: v })} />
-                  <NumberCell value={line.fee} onChange={(v) => patchLine(index, { fee: v })} />
-                  <NumberCell value={line.dis} onChange={(v) => patchLine(index, { dis: v })} />
+                  <MoneyCell value={line.fee} onChange={(v) => patchLine(index, { fee: v })} />
+                  <MoneyCell value={line.dis} onChange={(v) => patchLine(index, { dis: v })} />
                   <NumberCell value={line.vra} onChange={(v) => patchLine(index, { vra: v })} width={60} />
                   <td className="numeric">{money(line.tsstam)}</td>
                   <td>
@@ -464,6 +521,96 @@ function NumberCell({
   )
 }
 
+/** An amount in rials, grouped as you type.
+ *
+ * `type="number"` cannot do this — a browser will not render a separator inside
+ * one — and an ungrouped rial figure is genuinely hard to read: 21255000 and
+ * 2125500 differ by a factor of ten and by one character. Invoice amounts here
+ * run to eight and nine digits, so the grouping is not decoration.
+ *
+ * Text rather than number, therefore, with the separators inserted on every
+ * keystroke and the caret put back where it belongs — counting digits rather
+ * than characters, because reformatting moves every separator and a caret
+ * restored by character index walks backwards through the number as it grows.
+ *
+ * Persian and Arabic-Indic digits are accepted: the amount is often pasted or
+ * typed on a Persian keyboard, and rejecting ۱۲۳ would be a validation failure
+ * the operator cannot see.
+ */
+function MoneyCell({
+  value, onChange, width = 110,
+}: {
+  value: number | undefined
+  onChange: (value: number) => void
+  width?: number
+}) {
+  const input = useRef<HTMLInputElement>(null)
+  const [caret, setCaret] = useState<number | null>(null)
+
+  const text = value === undefined || Number.isNaN(value) ? '' : group(value)
+
+  // Laid in after render, because the value React paints is the reformatted one
+  // and setting selectionStart before that paint is overwritten by it.
+  useEffect(() => {
+    if (caret === null || !input.current) return
+    input.current.setSelectionRange(caret, caret)
+    setCaret(null)
+  }, [caret, text])
+
+  return (
+    <td className="numeric">
+      <input
+        ref={input}
+        // A numeric keypad on a phone without the number-input behaviour that
+        // would strip the separators.
+        inputMode="numeric"
+        className="ltr"
+        value={text}
+        onChange={(event) => {
+          const raw = event.target.value
+          const position = event.target.selectionStart ?? raw.length
+          const digitsBefore = countDigits(raw.slice(0, position))
+          const digits = toAscii(raw).replace(/[^\d]/g, '')
+          onChange(digits === '' ? 0 : Number(digits))
+          // Where the caret lands: after the same number of digits it was after
+          // before, wherever the separators ended up.
+          setCaret(offsetAfterDigits(group(digits === '' ? 0 : Number(digits)), digitsBefore))
+        }}
+        style={{ width, textAlign: 'end' }}
+      />
+    </td>
+  )
+}
+
+/** Digit grouping, in the same Persian numerals the rest of the app reads in. */
+function group(value: number): string {
+  return value.toLocaleString('fa-IR', { useGrouping: true, maximumFractionDigits: 0 })
+}
+
+function toAscii(text: string): string {
+  return text
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+}
+
+function countDigits(text: string): number {
+  return toAscii(text).replace(/[^\d]/g, '').length
+}
+
+/** The offset in `text` that sits just after its `count`-th digit. */
+function offsetAfterDigits(text: string, count: number): number {
+  if (count <= 0) return 0
+  let seen = 0
+  const ascii = toAscii(text)
+  for (let index = 0; index < ascii.length; index += 1) {
+    if (/\d/.test(ascii[index])) {
+      seen += 1
+      if (seen === count) return index + 1
+    }
+  }
+  return text.length
+}
+
 function Total({
   label, value, field, issues, strong,
 }: {
@@ -488,4 +635,42 @@ function Total({
       </td>
     </tr>
   )
+}
+
+
+/** Epoch millis to the `YYYY-MM-DD` an `<input type="date">` wants.
+ *
+ * Built from the local calendar parts rather than `toISOString().slice(0, 10)`,
+ * which converts to UTC first: an evening in Tehran is already the next day in
+ * UTC, so the ISO shortcut shows the operator a date one off from the one they
+ * picked — and that date is what the شماره منحصر به فرد مالیاتی encodes.
+ */
+function toDateInput(millis: number | undefined): string {
+  if (!millis) return ''
+  const when = new Date(millis)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`
+}
+
+/** A picked date back to epoch millis, keeping the time of day already on the
+ *  invoice. The organization records a تاریخ و زمان, not a date, and discarding
+ *  the clock to midnight would move every invoice to 00:00. */
+function fromDateInput(text: string, previous: number | undefined): number {
+  const [year, month, day] = text.split('-').map(Number)
+  if (!year || !month || !day) return previous ?? Date.now()
+  const base = new Date(previous ?? Date.now())
+  base.setFullYear(year, month - 1, day)
+  return base.getTime()
+}
+
+/** The Persian calendar reading of a timestamp, shown beside the picker.
+ *
+ * `<input type="date">` is Gregorian in every browser, and the operator thinks
+ * in Jalali — so the picker takes one and the hint states the other, rather than
+ * either one being left to be worked out. */
+function jalali(millis: number | undefined): string {
+  if (!millis) return ''
+  return new Date(millis).toLocaleDateString('fa-IR', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  })
 }

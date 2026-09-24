@@ -945,3 +945,90 @@ async def test_a_confirmed_cancellation_marks_the_original_cancelled(
 
 async def test_inquiry_requires_a_session(anonymous: httpx.AsyncClient) -> None:
     assert (await anonymous.post(f"/api/profiles/{PROFILE}/invoices/inquire")).status_code == 401
+
+
+# ------------------------------------------- the entry form sends no taxid
+
+
+def form_invoice() -> dict:
+    """What the entry form actually posts: no taxid, because it cannot know one.
+
+    Deliberately minimal — the derived money fields come back from /recompute —
+    and deliberately missing header.taxid, which is the shape that used to be
+    rejected before any handler saw it.
+    """
+    return {
+        "header": {
+            "indatim": 1683997837988,
+            "indati2m": 1683997837988,
+            "inty": 1,
+            "inp": 1,
+            "ins": 1,
+            "tins": "14003778990",
+            "tob": 2,
+            "setm": 1,
+            "tprdis": 20000,
+            "tdis": 500,
+            "tadis": 19500,
+            "tvam": 1755,
+            "todam": 0,
+            "tbill": 21255,
+        },
+        "body": [
+            {
+                "sstid": "2710000138624",
+                "sstt": "سرسیلندر",
+                "mu": "164",
+                "am": 2,
+                "fee": 10000,
+                "prdis": 20000,
+                "dis": 500,
+                "adis": 19500,
+                "vra": 9,
+                "vam": 1755,
+                "tsstam": 21255,
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize("action", ["verify", "recompute", ""])
+async def test_every_form_button_accepts_an_invoice_with_no_taxid(
+    client: httpx.AsyncClient, action: str
+) -> None:
+    """The regression that broke اعتبارسنجی, محاسبه مبالغ and ذخیره پیش‌نویس at once.
+
+    `taxid: str` with no default made the key mandatory, so all three returned
+    422 "Field required (body,invoice,header,taxid)" — demanding a number that
+    is derived from the serial counter at submission and that no operator can
+    supply. An empty string was always acceptable to the rule engine; only the
+    model disagreed.
+    """
+    path = f"/api/profiles/{PROFILE}/invoices/{action}".rstrip("/")
+    response = await client.post(path, json={"invoice": form_invoice()})
+    assert response.status_code != 422, response.text
+    assert response.status_code in (200, 201), response.text
+
+
+async def test_a_draft_saved_without_a_taxid_verifies_clean(
+    client: httpx.AsyncClient,
+) -> None:
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    assert saved["state"] == "draft", saved
+    assert saved["verification"]["ok"] is True, saved["verification"]["errors"]
+
+
+async def test_submitting_without_a_taxid_gets_one_generated(
+    client: httpx.AsyncClient,
+) -> None:
+    """The other end of the same contract: leaving it blank is how you ask for one."""
+    body = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+    assert body["taxId"], body
+    assert body["taxId"].startswith(MEMORY_ID)
+    assert len(body["taxId"]) == 22

@@ -521,3 +521,59 @@ def test_responses_ignore_fields_the_org_adds_later():
     error = ApiError.model_validate({"code": "4100", "message": "x", "severity": "FATAL"})
     assert error.code == "4100"
     assert not hasattr(error, "severity")
+
+
+# ------------------------------------------------- taxid is the app's to assign
+
+
+def test_an_invoice_without_a_taxid_is_accepted():
+    """The regression that broke every button on the entry form.
+
+    `taxid: str` with no default made the *key* mandatory, so a header that
+    simply omitted it was rejected with "Field required
+    (body,invoice,header,taxid)" — before reaching any of the code that fills it
+    in. That failed ذخیره پیش‌نویس, اعتبارسنجی and محاسبه مبالغ alike, none of
+    which has any business demanding a number the operator cannot know.
+    """
+    invoice = Invoice.model_validate(
+        {"header": {"indatim": 1683997837988, "ins": 1}, "body": [{"sstid": "2710000138624"}]}
+    )
+    assert invoice.header.taxid == ""
+
+
+def test_a_supplied_taxid_is_kept():
+    """Assigning one is the pipeline's job, but a caller may still pass its own."""
+    invoice = Invoice.model_validate(
+        {
+            "header": {"taxid": "A1121604C220002F095011", "indatim": 1, "ins": 1},
+            "body": [{"sstid": "x"}],
+        }
+    )
+    assert invoice.header.taxid == "A1121604C220002F095011"
+
+
+def test_a_blank_taxid_passes_the_rule_engine():
+    """The other half of the contract.
+
+    An empty taxid has to be acceptable to validation too, or the entry form
+    would trade a 422 for an error banner and the operator would be no better
+    off. The engine treats it as satisfied because the application supplies it.
+    """
+    from moadian.rules import RuleEngine
+
+    invoice = Invoice.model_validate(
+        {
+            "header": {
+                "indatim": 1683997837988, "inty": 1, "inp": 1, "ins": 1,
+                "tins": "14003778990", "tob": 2, "tprdis": 20000, "tdis": 500,
+                "tadis": 19500, "tvam": 1755, "todam": 0, "tbill": 21255, "setm": 1,
+            },
+            "body": [{
+                "sstid": "2710000138624", "sstt": "سرسیلندر", "mu": "164", "am": 2,
+                "fee": 10000, "prdis": 20000, "dis": 500, "adis": 19500, "vra": 9,
+                "vam": 1755, "tsstam": 21255,
+            }],
+        }
+    )
+    assert invoice.header.taxid == ""
+    assert RuleEngine().verify(invoice).ok

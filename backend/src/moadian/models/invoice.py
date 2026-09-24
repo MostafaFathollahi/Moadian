@@ -41,12 +41,24 @@ class ShippingGood(BaseModel):
 
 
 class InvoiceHeader(BaseModel):
-    """سرآیند صورتحساب. Only `taxid`, `indatim` and `ins` are required."""
+    """سرآیند صورتحساب. Only `indatim` and `ins` must be supplied by a caller.
+
+    ``taxid`` is required *on the wire* and is not a caller's to invent: it
+    encodes the fiscal memory, the issue date and a serial that must never
+    repeat, so :class:`~moadian.pipeline.InvoicePipeline` derives it from the
+    persisted counter at submission. Defaulting it to ``""`` is what lets a
+    caller leave it out and get a correct one — declaring it required meant
+    every draft, every اعتبارسنجی and every محاسبه مبالغ was rejected with
+    "Field required (body,invoice,header,taxid)" before any of them reached the
+    code that fills it in. The rule engine already treats a blank one as fine
+    for exactly this reason.
+    """
 
     model_config = _STRICT
 
     # --- required ---
-    taxid: str  # شماره منحصر به فرد مالیاتی
+    #: Left blank to have one generated. See the class docstring.
+    taxid: str = ""  # شماره منحصر به فرد مالیاتی
     indatim: int  # تاریخ و زمان صدور صورتحساب (میلادی) — epoch millis
     ins: int  # نوع تسویه
 
