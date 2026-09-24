@@ -135,6 +135,17 @@ class InvoiceIn(BaseModel):
     save: bool = True
 
 
+class SubmitIn(InvoiceIn):
+    """An invoice to file, and which stored record it came from.
+
+    ``record_id`` is what stops submission leaving a duplicate behind. Without
+    it the handler can only insert, so sending a saved draft produced two rows —
+    the draft, untouched and taxid-less, and a new SENT copy of the same payload.
+    """
+
+    record_id: int | None = None
+
+
 # ------------------------------------------------------------------ helpers
 
 
@@ -872,7 +883,7 @@ def create_app(
     @app.post("/api/profiles/{name}/invoices/submit", tags=["invoices"], dependencies=AUTHENTICATED)
     async def submit_invoice(
         profile: ActiveProfile,
-        body: InvoiceIn,
+        body: SubmitIn,
         settings: Annotated[Settings, Depends(get_settings)],
         store: Annotated[RecordStore, Depends(get_record_store)],
         engine: Annotated[RuleEngine, Depends(get_rule_engine)],
@@ -881,16 +892,39 @@ def create_app(
 
         The refusal happens before a serial is drawn — see
         :class:`~moadian.pipeline.InvoicePipeline`.
+
+        ``record_id`` names the draft being sent, and that row is *moved* to SENT
+        rather than a second row being inserted beside it. Omitting it inserts, as
+        an invoice typed and sent without ever being saved should.
         """
+        # Resolved before anything is signed: a draft that cannot legally be sent
+        # must not cost a serial to find out.
+        record = None
+        if body.record_id is not None:
+            record = store.get_invoice(body.record_id)
+            if record is None or record.profile != profile.name:
+                raise HTTPException(404, "صورتحساب یافت نشد")
+            if record.state not in (InvoiceState.DRAFT, InvoiceState.INVALID):
+                # The guard that matters. Re-sending an already-filed invoice
+                # files it a second time under a second شماره مالیاتی, and
+                # neither filing can be withdrawn except by an ابطالی.
+                raise HTTPException(
+                    409,
+                    "این صورتحساب قبلاً ارسال شده است؛ ارسال دوباره آن را برای بار "
+                    "دوم ثبت می‌کند. برای اصلاح، صورتحساب اصلاحی صادر کنید.",
+                )
+
         report = engine.verify(body.invoice)
         if not report.ok:
-            record = InvoiceRecord(
+            invalid = record or InvoiceRecord(
                 profile=profile.name,
                 state=InvoiceState.INVALID,
                 payload=body.invoice.to_wire_dict(),
-                detail=report.as_dict(),
             )
-            store.save_invoice(record)
+            invalid.state = InvoiceState.INVALID
+            invalid.payload = body.invoice.to_wire_dict()
+            invalid.detail = report.as_dict()
+            store.save_invoice(invalid)
             raise HTTPException(status_code=422, detail=report.as_dict())
 
         async with _client_for(profile, settings) as client:
@@ -898,15 +932,17 @@ def create_app(
             submissions = await pipeline.submit([body.invoice])
 
         submission = submissions[0]
-        record = InvoiceRecord(
+        record = record or InvoiceRecord(
             profile=profile.name,
             state=InvoiceState.SENT,
             payload=body.invoice.to_wire_dict(),
-            tax_id=submission.tax_id,
-            uid=submission.uid,
-            reference_number=submission.reference_number,
-            detail=report.as_dict(),
         )
+        record.state = InvoiceState.SENT
+        record.payload = body.invoice.to_wire_dict()
+        record.tax_id = submission.tax_id
+        record.uid = submission.uid
+        record.reference_number = submission.reference_number
+        record.detail = report.as_dict()
         store.save_invoice(record)
         return {
             "id": record.id,

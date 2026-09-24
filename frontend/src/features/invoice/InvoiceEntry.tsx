@@ -269,7 +269,9 @@ export function InvoiceEntry({
 
   const submit = () =>
     run('submit', async () => {
-      const result = await api.submit(profile.name, invoice)
+      // Pass the open draft, so submitting it moves that row to ارسال‌شده
+      // rather than leaving it behind as a taxid-less copy of what was sent.
+      const result = await api.submit(profile.name, invoice, editing)
       setMessage({
         kind: 'ok',
         text: `ارسال شد. شماره پیگیری ${result.referenceNumber ?? '—'} · شماره مالیاتی ${result.taxId ?? '—'}`,

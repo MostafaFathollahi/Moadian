@@ -1315,3 +1315,148 @@ async def test_a_malformed_unit_blocks_submission(client: httpx.AsyncClient) -> 
     )
     assert response.status_code == 422
     assert any(i["field"] == "mu" for i in response.json()["detail"]["errors"])
+
+
+# ------------------------------- submitting a saved draft leaves no duplicate
+
+
+async def test_submitting_a_saved_draft_moves_it_rather_than_copying_it(
+    client: httpx.AsyncClient,
+) -> None:
+    """The bug this endpoint's record_id exists for.
+
+    Save a draft, send it, and there were two rows: the draft, untouched and
+    taxid-less, beside a SENT copy of the identical payload. Submission could only
+    insert, because nothing told it which stored record the payload came from.
+    """
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit",
+            json={"invoice": form_invoice(), "record_id": saved["id"]},
+        )
+    ).json()
+
+    assert sent["id"] == saved["id"], "submission created a second record"
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert len(listing) == 1, f"{len(listing)} records after sending one draft"
+    assert listing[0]["state"] == "sent"
+    assert listing[0]["tax_id"]
+    assert listing[0]["reference_number"]
+
+
+async def test_no_draft_is_left_behind_with_an_empty_tax_id(
+    client: httpx.AsyncClient,
+) -> None:
+    """Stated as the operator saw it: a replica with no شماره مالیاتی."""
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit",
+        json={"invoice": form_invoice(), "record_id": saved["id"]},
+    )
+    drafts = (await client.get(f"/api/profiles/{PROFILE}/invoices?state=draft")).json()
+    assert drafts == []
+
+
+async def test_submitting_without_a_record_id_still_inserts(
+    client: httpx.AsyncClient,
+) -> None:
+    """An invoice typed and sent without ever being saved has no row to move."""
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert [r["id"] for r in listing] == [sent["id"]]
+    assert listing[0]["state"] == "sent"
+
+
+async def test_resending_an_already_sent_record_is_refused(
+    client: httpx.AsyncClient,
+) -> None:
+    """Filing it twice costs a second serial and a second شماره مالیاتی, and
+    neither filing can be withdrawn except by an ابطالی."""
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit",
+        json={"invoice": form_invoice(), "record_id": sent["id"]},
+    )
+    assert response.status_code == 409, response.text
+
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert len(listing) == 1
+    assert listing[0]["tax_id"] == sent["taxId"], "the tax id changed on a refused resend"
+
+
+async def test_the_refusal_to_resend_happens_before_a_serial_is_spent(
+    client: httpx.AsyncClient,
+) -> None:
+    """A serial only moves forward, so one burnt on a refusal is gone for good."""
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+    first_serial = sent["taxId"][11:21]
+
+    await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit",
+        json={"invoice": form_invoice(), "record_id": sent["id"]},
+    )
+    again = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+    assert int(again["taxId"][11:21], 16) == int(first_serial, 16) + 1
+
+
+async def test_an_invalid_submission_updates_the_draft_instead_of_adding_one(
+    client: httpx.AsyncClient,
+) -> None:
+    """The same duplication on the failure path: a refused submit used to insert
+    an INVALID copy beside the draft it came from."""
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    broken = form_invoice()
+    broken["header"]["tbill"] = 999999
+
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit",
+        json={"invoice": broken, "record_id": saved["id"]},
+    )
+    assert response.status_code == 422
+
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert len(listing) == 1
+    assert listing[0]["id"] == saved["id"]
+    assert listing[0]["state"] == "invalid"
+
+
+async def test_submitting_another_profiles_record_is_refused(
+    client: httpx.AsyncClient,
+) -> None:
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    await client.post(
+        "/api/profiles",
+        json={"name": "دیگر", "memory_id": "B22327", "environment": "production"},
+    )
+    response = await client.post(
+        "/api/profiles/دیگر/invoices/submit",
+        json={"invoice": form_invoice(), "record_id": saved["id"]},
+    )
+    assert response.status_code == 404

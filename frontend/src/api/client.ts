@@ -207,10 +207,12 @@ export const api = {
       `/api/profiles/${encode(profile)}/invoices`,
       { method: 'POST', body: JSON.stringify({ invoice }) },
     ),
-  submit: (profile: string, invoice: InvoicePayload) =>
+  /** File an invoice. `recordId` names the stored draft it came from, so that row
+   *  is moved to ارسال‌شده instead of a second copy being inserted beside it. */
+  submit: (profile: string, invoice: InvoicePayload, recordId?: number | null) =>
     request<SubmitResult>(`/api/profiles/${encode(profile)}/invoices/submit`, {
       method: 'POST',
-      body: JSON.stringify({ invoice }),
+      body: JSON.stringify({ invoice, record_id: recordId ?? null }),
     }),
   invoice: (profile: string, id: number) =>
     request<InvoiceRecord>(`/api/profiles/${encode(profile)}/invoices/${id}`),
