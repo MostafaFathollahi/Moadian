@@ -54,6 +54,9 @@ from .deps import (
     get_settings,
 )
 
+# ``app`` is deliberately absent: it exists only through the module
+# ``__getattr__`` at the bottom of this file, and naming a lazy attribute here
+# would be a name no static reader can resolve.
 __all__ = ["create_app"]
 
 _log = logging.getLogger(__name__)
@@ -1012,4 +1015,30 @@ def create_app(
     return app
 
 
-app = create_app()
+#: Cache for the lazily built module-level ``app``.
+_app: FastAPI | None = None
+
+
+def __getattr__(name: str) -> Any:
+    """Build ``moadian.api.app:app`` on first access, not on import.
+
+    ``app = create_app()`` at module scope was the obvious spelling and it is a
+    trap. :func:`create_app` reads ``.env``, loads the signing key, and *seeds
+    accounts* — so merely importing this module wrote to the instance directory.
+    Running the test suite from a deployment checkout was therefore enough to
+    create an ``admin``/``admin1234`` account in the live database, with the real
+    ``MOADIAN_SEED_USERS`` ignored ever after because seeding deliberately never
+    overwrites an existing user. It took a failing login on a fresh install to
+    notice, which is late.
+
+    A module ``__getattr__`` runs only for an attribute Python did not find, so
+    ``from moadian.api.app import create_app`` now touches nothing, while
+    ``uvicorn moadian.api.app:app`` resolves through here exactly as before. No
+    caller changes.
+    """
+    if name == "app":
+        global _app
+        if _app is None:
+            _app = create_app()
+        return _app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
