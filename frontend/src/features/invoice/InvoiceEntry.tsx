@@ -22,6 +22,10 @@ import { IssueList } from './IssueList'
  *  the spec records no content rule for it; length is the only constraint. */
 const MAX_SSTT = 400
 
+// mu stays blank. واحد اندازه‌گیری is اختیاری (RC_IITP §8-30)، and a blank one is
+// now dropped from the payload rather than sent as "" — which is what earned a
+// real invoice error 0103502. Defaulting it to a code we cannot verify would put
+// an unchecked unit on a tax filing, which is worse than reporting none.
 const BLANK_LINE: InvoiceLine = { sstid: '', sstt: '', mu: '', am: 1, fee: 0, dis: 0, vra: 9 }
 
 function emptyInvoice(): InvoicePayload {
@@ -533,13 +537,22 @@ export function InvoiceEntry({
           </button>
         }
       >
+        {/* The authoritative list is سند واحدهای اندازه‌گیری (RC_UMGS.ST) on
+            intamedia.ir and is not bundled with this application. 164 is offered
+            because it is the code the RC_TICS p.20 example invoice and every
+            sample in the official SDK use — not because we can name the unit it
+            denotes. Anything may be typed; the organization is the judge. */}
+        <datalist id="mu-codes">
+          <option value="164" />
+        </datalist>
+
         <div className="scroll-x">
           <table>
             <thead>
               <tr>
                 <th>شناسه کالا/خدمت</th>
                 <th>شرح</th>
-                <th>واحد</th>
+                <th>واحد (اختیاری)</th>
                 <th className="numeric">تعداد</th>
                 <th className="numeric">مبلغ واحد</th>
                 <th className="numeric">تخفیف</th>
@@ -595,9 +608,20 @@ export function InvoiceEntry({
                   </td>
                   <td>
                     <input
+                      className="ltr"
                       value={line.mu ?? ''}
+                      // Numeric code, max 8 (§8-30). Blank is legal and is
+                      // omitted from the payload entirely.
+                      inputMode="numeric"
+                      maxLength={8}
+                      list="mu-codes"
+                      placeholder="اختیاری"
+                      title="کد عددی از جدول واحدهای اندازه‌گیری سازمان (intamedia.ir). خالی گذاشتن مجاز است."
                       onChange={(e) => patchLine(index, { mu: e.target.value })}
-                      style={{ width: 70 }}
+                      style={{
+                        width: 80,
+                        borderColor: issuesByField.has(`mu#${index}`) ? 'var(--danger)' : undefined,
+                      }}
                     />
                   </td>
                   <NumberCell value={line.am} onChange={(v) => patchLine(index, { am: v })} />

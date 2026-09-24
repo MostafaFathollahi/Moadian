@@ -682,3 +682,79 @@ def test_two_lines_may_carry_different_descriptions_for_the_same_code():
     report = RuleEngine().validate(invoice)
     assert [v for v in report.violations if v.field == "sstt"] == []
     assert [v for v in report.violations if v.field == "sstid"] == []
+
+
+# --------------------------------------- واحد اندازه‌گیری (§8-30، جدول ۳۲)
+
+
+def _mu_issues(mu):
+    invoice = _invoice(_line(mu=mu))
+    return [v for v in RuleEngine().validate(invoice).violations if v.field == "mu"]
+
+
+def test_an_omitted_unit_is_accepted():
+    """§8-30 declares mu اختیاری. Omitting it is the legal way to say nothing."""
+    assert _mu_issues(None) == []
+
+
+def test_a_blank_unit_is_accepted_because_it_never_reaches_the_wire():
+    """to_wire_dict strips it, so a blank cannot produce 0103502 again."""
+    assert _mu_issues("") == []
+    assert _mu_issues("   ") == []
+
+
+def test_the_documented_unit_code_is_accepted_without_comment():
+    """164 is what the RC_TICS p.20 example and the official SDK samples use."""
+    assert _mu_issues("164") == []
+
+
+@pytest.mark.parametrize("mu", ["abc", "16 4", "12.5", "-1", "123456789"])
+def test_a_unit_that_is_not_a_short_numeric_code_is_an_error(mu):
+    """§8-30 declares it "رشته عددی، حداکثر ۸"."""
+    issues = _mu_issues(mu)
+    assert [i.rule for i in issues] == ["format.mu"]
+    assert issues[0].severity is Severity.ERROR
+
+
+def test_a_unit_typed_in_persian_digits_is_folded_rather_than_refused():
+    """۱۶۴ is 164 to a person and a different string to the tax service.
+
+    These are pasted out of Persian PDFs constantly, so the model folds them to
+    ASCII instead of rejecting them. Python makes this easy to miss:
+    ``"۱۶۴".isdigit()`` is True, so a numeric check passes and the wrong bytes go
+    out regardless.
+    """
+    invoice = _invoice(_line(mu="۱۶۴"))
+    assert invoice.body[0].mu == "164"
+    assert [v for v in RuleEngine().validate(invoice).violations if v.field == "mu"] == []
+    assert invoice.to_wire_dict()["body"][0]["mu"] == "164"
+
+
+def test_a_goods_code_typed_in_persian_digits_is_folded_too():
+    """Same class of failure, and fatal in the same way: the شناسه is what the
+    organization matches and taxes on."""
+    invoice = _invoice(_line(sstid="۲۷۲۰۰۰۰۱۱۴۵۴۲"))
+    assert invoice.body[0].sstid == "2720000114542"
+    assert invoice.to_wire_dict()["body"][0]["sstid"] == "2720000114542"
+
+
+def test_an_unrecognised_numeric_code_is_only_a_warning():
+    """The real table (RC_UMGS.ST, intamedia.ir) is not bundled here.
+
+    Treating everything outside the one code we can evidence as invalid would
+    reject every legitimate unit but that one. The organization checks it for
+    real; this only says we cannot vouch for it.
+    """
+    issues = _mu_issues("9999")
+    assert [i.rule for i in issues] == ["format.mu_unverified"]
+    assert issues[0].severity is Severity.WARNING
+    assert RuleEngine().validate(_invoice(_line(mu="9999"))).ok is True
+
+
+def test_the_offending_line_is_named():
+    issues = [
+        v
+        for v in RuleEngine().validate(_invoice(_line(mu="164"), _line(mu="abc"))).violations
+        if v.field == "mu"
+    ]
+    assert [v.line for v in issues] == [1]

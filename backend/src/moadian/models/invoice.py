@@ -18,7 +18,9 @@ right boundary to reject them — well before a tax id is spent.
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from moadian.persian import fold_digits
 
 __all__ = [
     "Invoice",
@@ -175,6 +177,26 @@ class InvoiceBodyItem(BaseModel):
     vba: float | None = None  # مبنای محاسبه ارزش افزوده
 
 
+    @field_validator("sstid", "mu", mode="before")
+    @classmethod
+    def _ascii_digits(cls, value: object) -> object:
+        """Fold Persian and Arabic-Indic digits to ASCII on the numeric codes.
+
+        ``۲۷۲۰۰۰۰۱۱۴۵۴۲`` is the same شناسه کالا/خدمت as ``2720000114542`` to a
+        person and a different string to the tax service, and these are routinely
+        pasted out of Persian PDFs and spreadsheets where they arrive in the first
+        form. Sent unfolded they are simply refused.
+
+        Python hides this particularly well: ``"۱۶۴".isdigit()`` is **True**, so a
+        format check that looks numeric passes and the wrong bytes go out anyway.
+
+        Only these two fields, and only because they are pure numeric codes.
+        Descriptive text is never rewritten — the شرح goes on the invoice exactly
+        as it was typed.
+        """
+        return fold_digits(value) if isinstance(value, str) else value
+
+
 class InvoicePayment(BaseModel):
     """قلم پرداخت. All fields optional."""
 
@@ -208,5 +230,35 @@ class Invoice(BaseModel):
 
         Unset fields are dropped entirely — the spec's own p.20 example carries
         no nulls — and `in_` goes out under its wire alias `in`.
+
+        **Blank strings are dropped too, and that is not cosmetic.** An optional
+        field the organization validates against a code list is legal when absent
+        and rejected when present-but-empty. A real invoice was refused with
+        error 0103502 ("مقدار وارد شده در فیلد «واحد اندازه‌گیری» جز مقادیر مجاز
+        نیست") because the entry form's blank ``mu`` travelled as ``""`` rather
+        than not travelling at all — ``exclude_none`` drops ``None`` and keeps
+        ``""``. Forty-six optional string fields on this model could do the same.
+
+        An empty string is how a form says "nothing here"; on this wire, absence
+        is how you say it.
         """
-        return self.model_dump(exclude_none=True, by_alias=True)
+        packed = self.model_dump(exclude_none=True, by_alias=True)
+        return _without_blanks(packed)
+
+
+def _without_blanks(value: Any) -> Any:
+    """Strip empty and whitespace-only strings, recursively.
+
+    Recursive because the body and payment lines are where most of the optional
+    text fields live; a pass over the header alone would have left the ``mu``
+    that caused this.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _without_blanks(inner)
+            for key, inner in value.items()
+            if not (isinstance(inner, str) and not inner.strip())
+        }
+    if isinstance(value, list):
+        return [_without_blanks(item) for item in value]
+    return value

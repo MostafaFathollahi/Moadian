@@ -39,6 +39,17 @@ DEFAULT_PATTERN = 1
 #: content — the length is the only constraint on it.
 MAX_SSTT_LENGTH = 400
 
+#: Maximum length of واحد اندازه‌گیری, RC_IITP §8-30، جدول ۳۲, where the field is
+#: declared "رشته عددی، حداکثر ۸" and اختیاری.
+MAX_MU_LENGTH = 8
+
+#: The one واحد اندازه‌گیری code this repository can evidence: it is what the
+#: RC_TICS p.20 example invoice and every sample in the official .NET SDK use.
+#: The authoritative list is RC_UMGS.ST on intamedia.ir and is NOT bundled here,
+#: so an unrecognised code is a warning — refusing it would block every legitimate
+#: unit in a table we do not hold.
+KNOWN_MU_CODES = frozenset({"164"})
+
 
 class RuleEngine:
     """Checks invoices against the transcribed portion of RC_IITP."""
@@ -101,7 +112,7 @@ class RuleEngine:
     # -- declared field lengths -------------------------------------------
 
     def _check_lengths(self, invoice: Invoice) -> list[Violation]:
-        """Text fields longer than RC_IITP declares them.
+        """Body text fields that do not match what RC_IITP declares for them.
 
         Only ``sstt`` so far, and it earns the check on its own: the field is
         capped at 400 characters (§8-28، جدول ۳۰) and the organization's own
@@ -132,6 +143,57 @@ class RuleEngine:
                         line=index,
                     )
                 )
+
+            # واحد اندازه‌گیری, §8-30، جدول ۳۲: اختیاری, but when present it has
+            # to be a code from RC_UMGS.ST — "رشته عددی، حداکثر ۸".
+            #
+            # This is the check that was missing when a real invoice came back
+            # 0103502 ("مقدار وارد شده در فیلد «واحد اندازه‌گیری» جز مقادیر مجاز
+            # نیست"). The value sent was ``""``: legal to omit, refused when
+            # present and empty. to_wire_dict now drops blanks so that exact
+            # shape cannot recur, and this catches the rest.
+            mu = item.mu
+            if mu is not None and mu.strip():
+                mu = mu.strip()
+                # `isascii()` as well as `isdigit()`: "۱۶۴".isdigit() is True in
+                # Python, so a digit test alone lets Persian numerals through to
+                # the wire, where they are refused. The model folds them first;
+                # this catches anything that reached here another way.
+                if not (mu.isascii() and mu.isdigit()) or len(mu) > MAX_MU_LENGTH:
+                    violations.append(
+                        Violation(
+                            field="mu",
+                            rule="format.mu",
+                            message=(
+                                "واحد اندازه‌گیری باید کد عددی حداکثر "
+                                f"{MAX_MU_LENGTH} رقمی از جدول واحدهای اندازه‌گیری "
+                                f"سازمان باشد؛ «{mu}» وارد شده. خالی گذاشتن آن مجاز است."
+                            ),
+                            reference="RC_IITP §8-30، جدول ۳۲",
+                            line=index,
+                        )
+                    )
+                elif mu not in KNOWN_MU_CODES:
+                    # A warning, not an error: the real table (RC_UMGS.ST, on
+                    # intamedia.ir) is not bundled here, so treating anything
+                    # outside it as invalid would reject every legitimate unit
+                    # but one. The organization checks it for real; this only
+                    # says we cannot vouch for it.
+                    violations.append(
+                        Violation(
+                            field="mu",
+                            rule="format.mu_unverified",
+                            message=(
+                                f"کد واحد اندازه‌گیری «{mu}» در این نسخه قابل بررسی "
+                                "نیست؛ فهرست مرجع (سند واحدهای اندازه‌گیری، "
+                                "intamedia.ir) همراه برنامه نیست. سازمان آن را "
+                                "بررسی می‌کند — خطای ۰۱۰۳۵۰۲ یعنی این کد مجاز نبوده."
+                            ),
+                            reference="RC_IITP §8-30، جدول ۳۲",
+                            severity=Severity.WARNING,
+                            line=index,
+                        )
+                    )
         return violations
 
     # -- obligations ------------------------------------------------------

@@ -577,3 +577,83 @@ def test_a_blank_taxid_passes_the_rule_engine():
     )
     assert invoice.header.taxid == ""
     assert RuleEngine().verify(invoice).ok
+
+
+# ------------------------------------- blank strings must not reach the wire
+
+
+def test_a_blank_optional_string_is_dropped_from_the_wire():
+    """The bug that got a real invoice refused.
+
+    Sent with `"mu": ""`, the organization answered 0103502 — "مقدار وارد شده در
+    فیلد «واحد اندازه‌گیری» جز مقادیر مجاز نیست". The field is اختیاری, so leaving
+    it out is legal; ``""`` is present-and-invalid. `exclude_none` dropped None
+    and kept the empty string, and the entry form's blank input produced exactly
+    that. Forty-six optional string fields on this model could do the same.
+    """
+    invoice = Invoice.model_validate(
+        {
+            "header": {"indatim": 1683997837988, "ins": 1, "bid": "", "scln": "", "billid": ""},
+            "body": [{"sstid": "2710000138624", "sstt": "", "mu": "", "cut": ""}],
+        }
+    )
+    wire = invoice.to_wire_dict()
+    assert "mu" not in wire["body"][0]
+    assert "sstt" not in wire["body"][0]
+    assert "cut" not in wire["body"][0]
+    assert "bid" not in wire["header"]
+    assert "scln" not in wire["header"]
+    assert "billid" not in wire["header"]
+
+
+def test_whitespace_only_counts_as_blank():
+    """A space typed into a field is not a code either."""
+    invoice = Invoice.model_validate(
+        {"header": {"indatim": 1, "ins": 1}, "body": [{"sstid": "x", "mu": "   "}]}
+    )
+    assert "mu" not in invoice.to_wire_dict()["body"][0]
+
+
+def test_a_blank_taxid_does_not_travel():
+    """It is filled by the pipeline at submission; an empty one is not a value."""
+    invoice = Invoice.model_validate({"header": {"indatim": 1, "ins": 1}, "body": [{"sstid": "x"}]})
+    assert "taxid" not in invoice.to_wire_dict()["header"]
+
+
+def test_a_real_value_still_travels():
+    """The obvious regression in the other direction."""
+    invoice = Invoice.model_validate(
+        {
+            "header": {"taxid": "A459XR050F000000000018", "indatim": 1, "ins": 1},
+            "body": [{"sstid": "x", "mu": "164", "sstt": "شرح"}],
+        }
+    )
+    wire = invoice.to_wire_dict()
+    assert wire["header"]["taxid"] == "A459XR050F000000000018"
+    assert wire["body"][0]["mu"] == "164"
+    assert wire["body"][0]["sstt"] == "شرح"
+
+
+def test_zero_is_not_blank():
+    """0 is a real amount; only strings are stripped."""
+    invoice = Invoice.model_validate(
+        {"header": {"indatim": 1, "ins": 1, "todam": 0}, "body": [{"sstid": "x", "dis": 0}]}
+    )
+    wire = invoice.to_wire_dict()
+    assert wire["header"]["todam"] == 0
+    assert wire["body"][0]["dis"] == 0
+
+
+def test_payment_lines_are_stripped_too():
+    """Most optional text fields are on the lines, not the header."""
+    invoice = Invoice.model_validate(
+        {
+            "header": {"indatim": 1, "ins": 1},
+            "body": [{"sstid": "x"}],
+            "payments": [{"iinn": "", "acn": "", "trmn": "123"}],
+        }
+    )
+    payment = invoice.to_wire_dict()["payments"][0]
+    assert "iinn" not in payment
+    assert "acn" not in payment
+    assert payment["trmn"] == "123"
