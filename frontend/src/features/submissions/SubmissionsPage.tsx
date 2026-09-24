@@ -19,7 +19,14 @@ import { StateChip } from './StateChip'
  *   is the half of filing an invoice that submission does not do — a سند stays
  *   ارسال‌شده until this runs.
  */
-export function SubmissionsPage({ profile }: { profile: ProfileView }) {
+export function SubmissionsPage({
+  profile,
+  onEdit,
+}: {
+  profile: ProfileView
+  /** Reopen a draft in the entry form. Absent, the column is simply not shown. */
+  onEdit?: (id: number) => void
+}) {
   const [records, setRecords] = useState<InvoiceRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -135,14 +142,27 @@ export function SubmissionsPage({ profile }: { profile: ProfileView }) {
                           {new Date(record.created_at).toLocaleString('fa-IR')}
                         </td>
                         <td>
-                          {hasDetail && (
-                            <button
-                              className="btn ghost"
-                              onClick={() => setExpanded(expanded === record.id ? null : record.id)}
-                            >
-                              {expanded === record.id ? 'بستن' : 'جزئیات'}
-                            </button>
-                          )}
+                          <div className="btn-row">
+                            {/* Only a draft. A sent invoice's payload is the
+                                record of what was actually signed, and the API
+                                refuses to rewrite it — offering the button would
+                                be a promise the server will not keep. */}
+                            {onEdit && (record.state === 'draft' || record.state === 'invalid') && (
+                              <button className="btn ghost" onClick={() => onEdit(record.id)}>
+                                ویرایش
+                              </button>
+                            )}
+                            {hasDetail && (
+                              <button
+                                className="btn ghost"
+                                onClick={() =>
+                                  setExpanded(expanded === record.id ? null : record.id)
+                                }
+                              >
+                                {expanded === record.id ? 'بستن' : 'جزئیات'}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                       {expanded === record.id && record.detail && (

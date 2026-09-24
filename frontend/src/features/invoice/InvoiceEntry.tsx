@@ -34,8 +34,22 @@ function emptyInvoice(): InvoicePayload {
   }
 }
 
-export function InvoiceEntry({ profile }: { profile: ProfileView }) {
+export function InvoiceEntry({
+  profile,
+  draftId,
+  onDraftOpened,
+}: {
+  profile: ProfileView
+  /** A stored draft to reopen, from پیگیری ارسال‌ها. */
+  draftId?: number | null
+  /** Told which record is being edited — null once it is submitted or cleared —
+   *  so the caller does not reopen the same draft on every visit. */
+  onDraftOpened?: (id: number | null) => void
+}) {
   const [invoice, setInvoice] = useState<InvoicePayload>(emptyInvoice)
+  // Which stored record this form is editing. Set, ذخیره overwrites it instead
+  // of saving yet another near-identical copy.
+  const [editing, setEditing] = useState<number | null>(draftId ?? null)
   const [patterns, setPatterns] = useState<PatternInfo[]>([])
   const [rules, setRules] = useState<PatternFields | null>(null)
   const [buyers, setBuyers] = useState<Buyer[]>([])
@@ -61,6 +75,27 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
     // identical to a search that matched nothing.
     void api.catalogueStatus().then(setCatalogue).catch(() => undefined)
   }, [])
+
+  // Reopening a stored draft. The id stays set while it is being edited, so
+  // leaving this page and coming back returns to the same draft rather than a
+  // blank form; صورتحساب جدید is what lets go of it.
+  useEffect(() => {
+    if (!draftId) return
+    setEditing(draftId)
+    api
+      .invoice(profile.name, draftId)
+      .then((record) => {
+        setInvoice(record.payload)
+        setVerification(record.detail ?? null)
+        setMessage({ kind: 'info', text: `پیش‌نویس ${draftId} برای ویرایش باز شد.` })
+      })
+      .catch((cause) =>
+        setMessage({
+          kind: 'err',
+          text: cause instanceof ApiError ? cause.message : String(cause),
+        }),
+      )
+  }, [draftId, profile.name])
 
   // Requiredness comes from جدول ۱ via the API, never from hard-coded rules
   // here — a correction to the matrix changes this form with no release.
@@ -152,10 +187,30 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
 
   const saveDraft = () =>
     run('save', async () => {
-      const saved = await api.saveDraft(profile.name, invoice)
+      // Overwrite when a stored record is open; insert only for a new invoice.
+      // Always inserting is what left the list full of near-duplicate drafts
+      // with no way to tell which one was current.
+      const saved = editing
+        ? await api.updateDraft(profile.name, editing, invoice)
+        : await api.saveDraft(profile.name, invoice)
+      setEditing(saved.id)
+      onDraftOpened?.(saved.id)
       setVerification(saved.verification)
-      setMessage({ kind: 'ok', text: `پیش‌نویس ذخیره شد (شناسه ${saved.id}).` })
+      setMessage({
+        kind: 'ok',
+        text: editing
+          ? `پیش‌نویس ${saved.id} به‌روزرسانی شد.`
+          : `پیش‌نویس ذخیره شد (شناسه ${saved.id}).`,
+      })
     })
+
+  const startNew = () => {
+    setInvoice(emptyInvoice())
+    setEditing(null)
+    onDraftOpened?.(null)
+    setVerification(null)
+    setMessage(null)
+  }
 
   const submit = () =>
     run('submit', async () => {
@@ -165,6 +220,9 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
         text: `ارسال شد. شماره پیگیری ${result.referenceNumber ?? '—'} · شماره مالیاتی ${result.taxId ?? '—'}`,
       })
       setInvoice(emptyInvoice())
+      // The record it came from is SENT now, and a sent invoice is not editable.
+      setEditing(null)
+      onDraftOpened?.(null)
       setVerification(null)
     })
 
@@ -174,11 +232,15 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
     <>
       <div className="page-head">
         <div>
-          <h1>صدور صورتحساب</h1>
+          <h1>{editing ? `ویرایش پیش‌نویس ${editing.toLocaleString('fa-IR')}` : 'صدور صورتحساب'}</h1>
           <p>
             {profile.environment_label} · شناسه یکتا{' '}
             <span className="ltr">{profile.memory_id}</span>
             {rules && ` · الگوی ${rules.name}`}
+            {/* Said plainly, because ذخیره behaves differently in the two cases
+                and the difference is otherwise invisible until the list grows a
+                duplicate. */}
+            {editing && ' · ذخیره همین پیش‌نویس را به‌روز می‌کند'}
           </p>
         </div>
         <div className="btn-row">
@@ -188,6 +250,11 @@ export function InvoiceEntry({ profile }: { profile: ProfileView }) {
           <button className="btn" onClick={verify} disabled={busy !== null}>
             {busy === 'verify' ? '…' : 'اعتبارسنجی'}
           </button>
+          {editing !== null && (
+            <button className="btn ghost" onClick={startNew} disabled={busy !== null}>
+              صورتحساب جدید
+            </button>
+          )}
           <button className="btn" onClick={saveDraft} disabled={busy !== null}>
             ذخیره پیش‌نویس
           </button>

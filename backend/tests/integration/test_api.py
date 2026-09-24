@@ -1032,3 +1032,130 @@ async def test_submitting_without_a_taxid_gets_one_generated(
     assert body["taxId"], body
     assert body["taxId"].startswith(MEMORY_ID)
     assert len(body["taxId"]) == 22
+
+
+# -------------------------------------------------- reopening and editing a draft
+
+
+async def test_a_saved_draft_can_be_read_back(client: httpx.AsyncClient) -> None:
+    """Without this the entry form has no way to reopen what it saved."""
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    body = (await client.get(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")).json()
+    assert body["id"] == saved["id"]
+    assert body["state"] == "draft"
+    assert body["payload"]["header"]["tbill"] == 21255
+
+
+async def test_editing_a_draft_rewrites_it_rather_than_adding_a_copy(
+    client: httpx.AsyncClient,
+) -> None:
+    """The regression this endpoint exists for: editing used to mean saving a
+    second copy, so the list filled with near-duplicates and none of them was
+    authoritative."""
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+
+    changed = form_invoice()
+    changed["body"][0]["sstt"] = "شرح تازه"
+    response = await client.put(
+        f"/api/profiles/{PROFILE}/invoices/{saved['id']}", json={"invoice": changed}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == saved["id"]
+
+    listing = (await client.get(f"/api/profiles/{PROFILE}/invoices")).json()
+    assert len(listing) == 1, "editing created a second record"
+    assert listing[0]["payload"]["body"][0]["sstt"] == "شرح تازه"
+
+
+async def test_editing_revalidates_and_can_move_a_draft_to_invalid(
+    client: httpx.AsyncClient,
+) -> None:
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    assert saved["state"] == "draft"
+
+    broken = form_invoice()
+    broken["header"]["tbill"] = 999999  # no longer agrees with the lines
+    body = (
+        await client.put(
+            f"/api/profiles/{PROFILE}/invoices/{saved['id']}", json={"invoice": broken}
+        )
+    ).json()
+    assert body["state"] == "invalid"
+    assert body["verification"]["ok"] is False
+
+
+async def test_an_invalid_draft_can_be_fixed_back_to_draft(client: httpx.AsyncClient) -> None:
+    """Saving a broken invoice records it as invalid; correcting it must clear that."""
+    broken = form_invoice()
+    broken["header"]["tbill"] = 999999
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": broken})
+    ).json()
+    assert saved["state"] == "invalid"
+
+    body = (
+        await client.put(
+            f"/api/profiles/{PROFILE}/invoices/{saved['id']}", json={"invoice": form_invoice()}
+        )
+    ).json()
+    assert body["state"] == "draft"
+    assert body["verification"]["ok"] is True
+
+
+async def test_a_sent_invoice_cannot_be_edited(client: httpx.AsyncClient) -> None:
+    """The payload of a sent invoice is the record of what was actually signed.
+
+    The organization holds it, an اصلاحی is compared against it, and rewriting it
+    here would leave this application disagreeing with the کارپوشه about what was
+    filed while showing no sign of the change.
+    """
+    sent = (
+        await client.post(
+            f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": form_invoice()}
+        )
+    ).json()
+
+    changed = form_invoice()
+    changed["body"][0]["sstt"] = "دستکاری‌شده"
+    response = await client.put(
+        f"/api/profiles/{PROFILE}/invoices/{sent['id']}", json={"invoice": changed}
+    )
+    assert response.status_code == 409, response.text
+
+    stored = (await client.get(f"/api/profiles/{PROFILE}/invoices/{sent['id']}")).json()
+    assert stored["payload"]["body"][0]["sstt"] == "سرسیلندر", "the sent payload was modified"
+    assert stored["state"] == "sent"
+
+
+async def test_reading_an_unknown_invoice_is_404(client: httpx.AsyncClient) -> None:
+    assert (await client.get(f"/api/profiles/{PROFILE}/invoices/9999")).status_code == 404
+
+
+async def test_another_profiles_draft_is_not_reachable(client: httpx.AsyncClient) -> None:
+    """Invoices are profile-scoped; a memory id must not see another's records."""
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": form_invoice()})
+    ).json()
+    await client.post(
+        "/api/profiles",
+        json={"name": "دیگر", "memory_id": "B22327", "environment": "production"},
+    )
+    assert (await client.get(f"/api/profiles/دیگر/invoices/{saved['id']}")).status_code == 404
+    assert (
+        await client.put(
+            f"/api/profiles/دیگر/invoices/{saved['id']}", json={"invoice": form_invoice()}
+        )
+    ).status_code == 404
+
+
+async def test_editing_requires_a_session(anonymous: httpx.AsyncClient) -> None:
+    assert (await anonymous.get(f"/api/profiles/{PROFILE}/invoices/1")).status_code == 401
+    assert (
+        await anonymous.put(f"/api/profiles/{PROFILE}/invoices/1", json={"invoice": form_invoice()})
+    ).status_code == 401

@@ -211,6 +211,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ invoice }),
     }),
+  invoice: (profile: string, id: number) =>
+    request<InvoiceRecord>(`/api/profiles/${encode(profile)}/invoices/${id}`),
+  /** Overwrite a draft in place. Only draft/invalid may be rewritten — a sent
+   *  invoice's payload is the record of what was actually signed. */
+  updateDraft: (profile: string, id: number, invoice: InvoicePayload) =>
+    request<{ id: number; state: string; verification: VerifyResult }>(
+      `/api/profiles/${encode(profile)}/invoices/${id}`,
+      { method: 'PUT', body: JSON.stringify({ invoice }) },
+    ),
   invoices: (profile: string, state?: string) =>
     request<InvoiceRecord[]>(
       `/api/profiles/${encode(profile)}/invoices${state ? `?state=${encode(state)}` : ''}`,

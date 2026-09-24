@@ -761,6 +761,66 @@ def create_app(
         store.save_invoice(record)
         return {"id": record.id, "state": record.state, "verification": report.as_dict()}
 
+    @app.get(
+        "/api/profiles/{name}/invoices/{invoice_id}",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    def read_invoice(
+        profile: ActiveProfile,
+        invoice_id: int,
+        store: Annotated[RecordStore, Depends(get_record_store)],
+    ):
+        """One stored invoice, for reopening it in the entry form."""
+        record = store.get_invoice(invoice_id)
+        if record is None or record.profile != profile.name:
+            raise HTTPException(404, "صورتحساب یافت نشد")
+        return record
+
+    @app.put(
+        "/api/profiles/{name}/invoices/{invoice_id}",
+        tags=["invoices"],
+        dependencies=AUTHENTICATED,
+    )
+    def update_invoice(
+        profile: ActiveProfile,
+        invoice_id: int,
+        body: InvoiceIn,
+        store: Annotated[RecordStore, Depends(get_record_store)],
+        engine: Annotated[RuleEngine, Depends(get_rule_engine)],
+    ):
+        """Overwrite a draft in place.
+
+        Without this, editing a saved draft meant saving a second copy of it and
+        deleting neither, so the list filled with near-duplicates and no version
+        of them was the authoritative one.
+
+        **Only DRAFT and INVALID may be rewritten.** The payload of a submitted
+        invoice is the record of the exact bytes that were signed and sent; the
+        organization has it, it is what an اصلاحی will be compared against, and
+        editing it here would leave this application disagreeing with the
+        کارپوشه about what was filed while showing no sign of it. A correction
+        to something already sent is a new invoice carrying ``ins`` and the
+        original's شماره مالیاتی — see the referring endpoint — never an edit.
+        """
+        record = store.get_invoice(invoice_id)
+        if record is None or record.profile != profile.name:
+            raise HTTPException(404, "صورتحساب یافت نشد")
+        if record.state not in (InvoiceState.DRAFT, InvoiceState.INVALID):
+            raise HTTPException(
+                409,
+                "تنها پیش‌نویس قابل ویرایش است. برای اصلاح صورتحساب ارسال‌شده، "
+                "صورتحساب اصلاحی صادر کنید.",
+            )
+
+        report = engine.verify(body.invoice)
+        record.state = InvoiceState.DRAFT if report.ok else InvoiceState.INVALID
+        record.payload = body.invoice.to_wire_dict()
+        record.tax_id = body.invoice.header.taxid or None
+        record.detail = report.as_dict()
+        store.save_invoice(record)
+        return {"id": record.id, "state": record.state, "verification": report.as_dict()}
+
     @app.post("/api/profiles/{name}/invoices/submit", tags=["invoices"], dependencies=AUTHENTICATED)
     async def submit_invoice(
         profile: ActiveProfile,

@@ -47,6 +47,10 @@ export function App() {
 
 function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
   const [route, setRoute] = useState<Route>('dashboard')
+  // Which stored draft the entry form is editing. Held until the form submits
+  // it or the operator asks for a new invoice, so switching to پیگیری and back
+  // returns to the same draft instead of a blank form.
+  const [openDraft, setOpenDraft] = useState<number | null>(null)
   const [profiles, setProfiles] = useState<ProfileView[]>([])
   const [active, setActive] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -170,9 +174,19 @@ function Shell({ user, onSignOut }: { user: UserInfo; onSignOut: () => void }) {
         ) : route === 'dashboard' ? (
           <DashboardPage profile={profile} onNavigate={setRoute} />
         ) : route === 'invoice' ? (
-          <InvoiceEntry profile={profile} />
+          <InvoiceEntry
+            profile={profile}
+            draftId={openDraft}
+            onDraftOpened={setOpenDraft}
+          />
         ) : (
-          <SubmissionsPage profile={profile} />
+          <SubmissionsPage
+            profile={profile}
+            onEdit={(id) => {
+              setOpenDraft(id)
+              setRoute('invoice')
+            }}
+          />
         )}
       </main>
     </div>
