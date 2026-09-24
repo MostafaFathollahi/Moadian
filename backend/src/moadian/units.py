@@ -1,25 +1,28 @@
 """واحدهای اندازه‌گیری کالا/خدمت — the organization's unit-of-measure codes.
 
-The ``mu`` field of an invoice line takes a code from this table and nothing else.
-RC_IITP §8-30، جدول ۳۲ declares the field اختیاری and "رشته عددی، حداکثر ۸", and
-points at سند واحدهای اندازه‌گیری کالا/خدمت (RC_UMGS.ST) on intamedia.ir for the
-values. Sending anything outside it earns error **0103502** — "مقدار وارد شده در
-فیلد «واحد اندازه‌گیری» جز مقادیر مجاز نیست" — which is how this table came to be
-transcribed here: an invoice was refused for a blank ``mu``, and the list was not
-available to check against.
+Transcribed from **RC_UMGS.ST_V1.18** (اردیبهشت ۱۴۰۴), `Docs/RC_UMGS_ST_V1_18.pdf`,
+which is the document RC_IITP §8-30، جدول ۳۲ points at for the values ``mu`` may
+take. 102 codes. Anything outside them earns error **0103502** — "مقدار وارد شده
+در فیلد «واحد اندازه‌گیری» جز مقادیر مجاز نیست" — which is how this table came to
+be needed: an invoice was refused for a blank ``mu`` and there was no list to
+check against.
 
-Transcribed from the published table, 97 codes. Two liberties, both cosmetic:
-Arabic yeh (U+064A) and kaf (U+0643) in the names are folded to their Persian
-forms, because they are keyboard artefacts rather than distinct letters, and a
-handful of reversed parenthesis pairs are righted. **The codes are verbatim.**
+The code lengths look irregular — 161, 1611 and 16110 all exist — and the numbers
+are not contiguous: 16106, 16107, 16109, 16123 and 16124 are simply absent. That
+is the document's own shape, not a gap in the transcription.
 
-The code lengths look irregular — 161, 1611, 16110 all exist — and that is the
-table's own shape, not a transcription error: 161-169, then 1610-1694, then
-16100-16129. ``164`` being کیلوگرم is what the RC_TICS p.20 example and the
-official SDK samples use, which is a useful cross-check on the whole list.
+Two departures from the PDF's text, both presentational. Arabic yeh (U+064A) and
+kaf (U+0643) in the names are folded to their Persian forms — they are keyboard
+artefacts, and leaving them in makes a name unfindable to anyone typing Persian.
+And eight names whose parentheses the PDF's text layer mangles are repaired, each
+one listed in the generator rather than pattern-matched. **The codes are verbatim.**
 
-This is a snapshot. The organization revises it, so an unrecognised code is
-reported as a warning rather than refused — see
+``164`` being کیلوگرم is worth noting: it is the value the RC_TICS p.20 example
+invoice and every sample in the official .NET SDK use, for a سرسیلندر — sold by
+weight. The agreement is a cross-check that the rows did not shift.
+
+The organization revises this list (V1.18 added نفر-ماه over V1.16), so an
+unrecognised code is reported as a warning rather than refused — see
 :meth:`moadian.rules.engine.RuleEngine._check_lengths`.
 """
 
@@ -27,11 +30,11 @@ from __future__ import annotations
 
 __all__ = ["DEFAULT_UNIT", "UNITS", "unit_name"]
 
-#: کد واحد اندازه‌گیری «عدد». The sensible default for a line that is counted
-#: rather than weighed or measured, which is most of them.
+#: کد واحد اندازه‌گیری «عدد». The default for a new invoice line: most things are
+#: counted rather than weighed or measured.
 DEFAULT_UNIT = "1627"
 
-#: code -> نام واحد, in the published table's own order.
+#: code -> نام واحد, in the document's own row order.
 UNITS: dict[str, str] = {
     "1611": "لنگه",
     "1612": "عدل",
@@ -75,7 +78,7 @@ UNITS: dict[str, str] = {
     "1617": "جلد",
     "162": "تیوب",
     "165": "متر",
-    "1610": "کالف",
+    "1610": "کلاف",
     "1615": "کیسه",
     "1680": "طغرا",
     "1639": "بشکه",
@@ -123,16 +126,21 @@ UNITS: dict[str, str] = {
     "1681": "ویال",
     "1667": "حلقه (دیسک)",
     "16120": "نسخه (جلد)",
-    "16121": "نفر- ساعت",
+    "16121": "نفر-ساعت",
     "16122": "کیلومتر",
     "16125": "آمپر",
     "16126": "میلی آمپر",
     "16127": "مثقال",
     "16128": "سیر",
-    "16129": "دفعه(time)",
+    "16129": "دفعه (time)",
+    "16130": "مگا یونیت",
+    "16131": "کادر",
+    "16132": "پرس",
+    "16133": "بلوک",
+    "16134": "نفر-ماه",
 }
 
 
 def unit_name(code: str | None) -> str | None:
-    """The Persian name of a unit code, or ``None`` if it is not in this snapshot."""
+    """The Persian name of a unit code, or ``None`` if it is not in this edition."""
     return UNITS.get((code or "").strip()) or None

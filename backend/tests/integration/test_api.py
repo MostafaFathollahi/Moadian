@@ -1248,7 +1248,7 @@ async def test_the_unit_table_is_served(client: httpx.AsyncClient) -> None:
     """The form needs names, not codes: nobody should have to know 1627 is عدد."""
     body = (await client.get("/api/units")).json()
     assert body["default"] == "1627"
-    assert len(body["units"]) == 97
+    assert len(body["units"]) == 102
     by_code = {u["code"]: u["name"] for u in body["units"]}
     assert by_code["1627"] == "عدد"
     assert by_code["164"] == "کیلوگرم"
