@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import type { CatalogueEntry, CatalogueStatus, GoodsService } from '../../api/types'
+import type {
+  CatalogueEntry,
+  CatalogueStatus,
+  GoodsService,
+  UnitTable,
+} from '../../api/types'
 import { Banner, Card, Empty, Field, money } from '../../components/common'
 
 /** کالا و خدمات — one catalogue, shared by every fiscal memory.
@@ -10,6 +15,7 @@ import { Banner, Card, Empty, Field, money } from '../../components/common'
  */
 export function GoodsPage() {
   const [goods, setGoods] = useState<GoodsService[] | null>(null)
+  const [units, setUnits] = useState<UnitTable | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState({
     stuff_id: '', description: '', unit: '', vat_rate: '9', default_fee: '', is_default: false,
@@ -20,6 +26,7 @@ export function GoodsPage() {
   }, [])
 
   useEffect(() => { setGoods(null); load() }, [load])
+  useEffect(() => { void api.units().then(setUnits).catch(() => undefined) }, [])
 
   async function add() {
     setError(null)
@@ -82,12 +89,20 @@ export function GoodsPage() {
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
           </Field>
-          <Field label="واحد اندازه‌گیری" hint="کد واحد، مثلاً ۱۶۴">
-            <input
-              className="ltr"
+          {/* The same table the invoice form uses. A code outside it is error
+              0103502 on submission, so it is chosen rather than typed. */}
+          <Field label="واحد اندازه‌گیری" hint="در فرم صورتحساب از پیش پر می‌شود">
+            <select
               value={draft.unit}
               onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-            />
+            >
+              <option value="">— بدون واحد —</option>
+              {(units?.units ?? []).map((u) => (
+                <option key={u.code} value={u.code}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="نرخ مالیات بر ارزش افزوده (٪)">
             <input
@@ -132,6 +147,7 @@ export function GoodsPage() {
                   <tr>
                     <th>شرح</th>
                     <th>شناسه</th>
+                    <th>واحد</th>
                     <th className="numeric">نرخ</th>
                     <th className="numeric">مبلغ واحد</th>
                     <th />
@@ -145,6 +161,11 @@ export function GoodsPage() {
                         {item.is_default && <span className="chip accent" style={{ marginInlineStart: 6 }}>پیش‌فرض</span>}
                       </td>
                       <td className="ltr small">{item.stuff_id}</td>
+                      <td className="small muted">
+                        {item.unit
+                          ? (units?.units.find((u) => u.code === item.unit)?.name ?? item.unit)
+                          : '—'}
+                      </td>
                       <td className="numeric">{item.vat_rate ?? '—'}</td>
                       <td className="numeric">{money(item.default_fee)}</td>
                       <td>

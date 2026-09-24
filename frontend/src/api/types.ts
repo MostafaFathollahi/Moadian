@@ -320,3 +320,16 @@ export interface CatalogueItem {
   /** Every VAT rate this code has carried, newest first. */
   history: CatalogueEntry[]
 }
+
+/** One واحد اندازه‌گیری code. The `mu` field of an invoice line takes a code from
+ *  this table and nothing else — anything outside it is error 0103502. */
+export interface UnitOfMeasure {
+  code: string
+  name: string
+}
+
+export interface UnitTable {
+  /** کد واحد «عدد». Applied to a new line, since most things are counted. */
+  default: string
+  units: UnitOfMeasure[]
+}

@@ -1239,3 +1239,79 @@ async def test_another_profiles_draft_cannot_be_deleted(client: httpx.AsyncClien
 
 async def test_deleting_requires_a_session(anonymous: httpx.AsyncClient) -> None:
     assert (await anonymous.delete(f"/api/profiles/{PROFILE}/invoices/1")).status_code == 401
+
+
+# --------------------------------------------------------- واحدهای اندازه‌گیری
+
+
+async def test_the_unit_table_is_served(client: httpx.AsyncClient) -> None:
+    """The form needs names, not codes: nobody should have to know 1627 is عدد."""
+    body = (await client.get("/api/units")).json()
+    assert body["default"] == "1627"
+    assert len(body["units"]) == 97
+    by_code = {u["code"]: u["name"] for u in body["units"]}
+    assert by_code["1627"] == "عدد"
+    assert by_code["164"] == "کیلوگرم"
+
+
+async def test_the_unit_table_requires_a_session(anonymous: httpx.AsyncClient) -> None:
+    assert (await anonymous.get("/api/units")).status_code == 401
+
+
+async def test_an_invoice_with_the_default_unit_verifies_clean(
+    client: httpx.AsyncClient,
+) -> None:
+    invoice = form_invoice()
+    invoice["body"][0]["mu"] = "1627"
+    report = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices/verify", json={"invoice": invoice})
+    ).json()
+    assert report["ok"] is True
+    assert [i for i in report["warnings"] if i["field"] == "mu"] == []
+
+
+async def test_the_blank_unit_that_was_rejected_no_longer_reaches_the_wire(
+    client: httpx.AsyncClient,
+) -> None:
+    """The invoice that came back 0103502 carried `"mu": ""`.
+
+    §8-30 makes mu اختیاری, so absence is legal and an empty string is not. The
+    payload now omits it, which is the shape the organization accepts.
+    """
+    invoice = form_invoice()
+    invoice["body"][0]["mu"] = ""
+    recomputed = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices/recompute", json={"invoice": invoice})
+    ).json()
+    assert "mu" not in recomputed["body"][0]
+
+    saved = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices", json={"invoice": invoice})
+    ).json()
+    assert saved["verification"]["ok"] is True
+    stored = (await client.get(f"/api/profiles/{PROFILE}/invoices/{saved['id']}")).json()
+    assert "mu" not in stored["payload"]["body"][0]
+
+
+async def test_an_unrecognised_unit_warns_but_does_not_block(
+    client: httpx.AsyncClient,
+) -> None:
+    """The table is a snapshot; the organization revises it. Blocking a code it
+    has since added would be worse than flagging one it never had."""
+    invoice = form_invoice()
+    invoice["body"][0]["mu"] = "99999"
+    report = (
+        await client.post(f"/api/profiles/{PROFILE}/invoices/verify", json={"invoice": invoice})
+    ).json()
+    assert report["ok"] is True
+    assert [i["field"] for i in report["warnings"] if i["field"] == "mu"] == ["mu"]
+
+
+async def test_a_malformed_unit_blocks_submission(client: httpx.AsyncClient) -> None:
+    invoice = form_invoice()
+    invoice["body"][0]["mu"] = "کیلوگرم"  # the name, not the code
+    response = await client.post(
+        f"/api/profiles/{PROFILE}/invoices/submit", json={"invoice": invoice}
+    )
+    assert response.status_code == 422
+    assert any(i["field"] == "mu" for i in response.json()["detail"]["errors"])

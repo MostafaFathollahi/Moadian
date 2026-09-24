@@ -52,6 +52,7 @@ from moadian.store import (
     InvoiceState,
     RecordStore,
 )
+from moadian.units import DEFAULT_UNIT, UNITS
 
 from .deps import (
     ActiveProfile,
@@ -434,6 +435,19 @@ def create_app(
             }
             for env in Environment
         ]
+
+    @app.get("/api/units", tags=["metadata"], dependencies=AUTHENTICATED)
+    def units():
+        """واحدهای اندازه‌گیری — the codes an invoice line's ``mu`` may carry.
+
+        Served so the form can offer names rather than make an operator type a
+        number they have to look up elsewhere. A wrong one is error 0103502, and
+        the field is the reason this list is bundled at all.
+        """
+        return {
+            "default": DEFAULT_UNIT,
+            "units": [{"code": code, "name": name} for code, name in UNITS.items()],
+        }
 
     @app.get("/api/patterns", tags=["metadata"], dependencies=AUTHENTICATED)
     def patterns() -> list[dict[str, Any]]:

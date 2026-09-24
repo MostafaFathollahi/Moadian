@@ -10,6 +10,7 @@ import type {
   PatternFields,
   PatternInfo,
   ProfileView,
+  UnitTable,
   VerifyResult,
 } from '../../api/types'
 import { Banner, Card, Field, money } from '../../components/common'
@@ -22,11 +23,15 @@ import { IssueList } from './IssueList'
  *  the spec records no content rule for it; length is the only constraint. */
 const MAX_SSTT = 400
 
-// mu stays blank. واحد اندازه‌گیری is اختیاری (RC_IITP §8-30)، and a blank one is
-// now dropped from the payload rather than sent as "" — which is what earned a
-// real invoice error 0103502. Defaulting it to a code we cannot verify would put
-// an unchecked unit on a tax filing, which is worse than reporting none.
-const BLANK_LINE: InvoiceLine = { sstid: '', sstt: '', mu: '', am: 1, fee: 0, dis: 0, vra: 9 }
+/** کد واحد «عدد». Most things on an invoice are counted rather than weighed, and
+ *  a blank mu is what earned a real invoice error 0103502 — the field is optional
+ *  but an empty string is not a code. The server is the authority on the table
+ *  (GET /api/units); this is the fallback if that call has not landed yet. */
+const DEFAULT_UNIT = '1627'
+
+const BLANK_LINE: InvoiceLine = {
+  sstid: '', sstt: '', mu: DEFAULT_UNIT, am: 1, fee: 0, dis: 0, vra: 9,
+}
 
 function emptyInvoice(): InvoicePayload {
   return {
@@ -63,9 +68,15 @@ export function InvoiceEntry({
   const [buyers, setBuyers] = useState<Buyer[]>([])
   const [goods, setGoods] = useState<GoodsService[]>([])
   const [catalogue, setCatalogue] = useState<CatalogueStatus | null>(null)
+  const [units, setUnits] = useState<UnitTable | null>(null)
   const [verification, setVerification] = useState<VerifyResult | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null)
+
+  const unitByCode = useMemo(
+    () => new Map((units?.units ?? []).map((u) => [u.code, u.name])),
+    [units],
+  )
 
   const pattern = invoice.header.inp ?? 1
   const invoiceType = invoice.header.inty ?? 1
@@ -82,6 +93,7 @@ export function InvoiceEntry({
     // Status, not results: without it an un-imported catalogue looks
     // identical to a search that matched nothing.
     void api.catalogueStatus().then(setCatalogue).catch(() => undefined)
+    void api.units().then(setUnits).catch(() => undefined)
   }, [])
 
   // Reopening a stored draft. The id stays set while it is being edited, so
@@ -111,6 +123,20 @@ export function InvoiceEntry({
     setRules(null)
     void api.patternFields(pattern, invoiceType).then(setRules).catch(() => setRules(null))
   }, [pattern, invoiceType])
+
+  // The server owns the unit table, including which code is the default. A line
+  // still carrying the compiled-in fallback is moved onto the server's answer, so
+  // the two cannot drift apart across a table revision.
+  useEffect(() => {
+    const preferred = units?.default
+    if (!preferred || preferred === DEFAULT_UNIT) return
+    setInvoice((current) => ({
+      ...current,
+      body: current.body.map((line) =>
+        line.mu === DEFAULT_UNIT ? { ...line, mu: preferred } : line,
+      ),
+    }))
+  }, [units?.default])
 
   // شماره اقتصادی فروشنده comes from the certificate that will sign the invoice.
   //
@@ -537,22 +563,13 @@ export function InvoiceEntry({
           </button>
         }
       >
-        {/* The authoritative list is سند واحدهای اندازه‌گیری (RC_UMGS.ST) on
-            intamedia.ir and is not bundled with this application. 164 is offered
-            because it is the code the RC_TICS p.20 example invoice and every
-            sample in the official SDK use — not because we can name the unit it
-            denotes. Anything may be typed; the organization is the judge. */}
-        <datalist id="mu-codes">
-          <option value="164" />
-        </datalist>
-
         <div className="scroll-x">
           <table>
             <thead>
               <tr>
                 <th>شناسه کالا/خدمت</th>
                 <th>شرح</th>
-                <th>واحد (اختیاری)</th>
+                <th>واحد</th>
                 <th className="numeric">تعداد</th>
                 <th className="numeric">مبلغ واحد</th>
                 <th className="numeric">تخفیف</th>
@@ -607,22 +624,33 @@ export function InvoiceEntry({
                     />
                   </td>
                   <td>
-                    <input
-                      className="ltr"
+                    {/* A select, not a text box: the codes are opaque numbers and
+                        an operator should not have to know that 1627 is عدد. A
+                        code outside the table is error 0103502, so picking from
+                        the list is the only reliable way to fill it.
+                        "بدون واحد" is offered because §8-30 makes mu اختیاری and
+                        a blank is dropped from the payload rather than sent. */}
+                    <select
                       value={line.mu ?? ''}
-                      // Numeric code, max 8 (§8-30). Blank is legal and is
-                      // omitted from the payload entirely.
-                      inputMode="numeric"
-                      maxLength={8}
-                      list="mu-codes"
-                      placeholder="اختیاری"
-                      title="کد عددی از جدول واحدهای اندازه‌گیری سازمان (intamedia.ir). خالی گذاشتن مجاز است."
                       onChange={(e) => patchLine(index, { mu: e.target.value })}
                       style={{
-                        width: 80,
+                        minWidth: 120,
                         borderColor: issuesByField.has(`mu#${index}`) ? 'var(--danger)' : undefined,
                       }}
-                    />
+                    >
+                      <option value="">— بدون واحد —</option>
+                      {/* A code already on the invoice that this snapshot of the
+                          table does not contain still has to be selectable, or
+                          reopening such a draft would silently change it. */}
+                      {line.mu && !unitByCode.has(line.mu) && (
+                        <option value={line.mu}>{line.mu} (ناشناخته)</option>
+                      )}
+                      {(units?.units ?? []).map((u) => (
+                        <option key={u.code} value={u.code}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <NumberCell value={line.am} onChange={(v) => patchLine(index, { am: v })} />
                   <MoneyCell value={line.fee} onChange={(v) => patchLine(index, { fee: v })} />

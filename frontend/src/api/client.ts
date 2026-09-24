@@ -25,6 +25,7 @@ import type {
   ProfileView,
   SigningMaterial,
   SubmitResult,
+  UnitTable,
   UserInfo,
   VerifyResult,
 } from './types'
@@ -238,6 +239,8 @@ export const api = {
     }),
   /** The organization's code list. Read-only — it is loaded on the server by
    *  tools/import_catalogue.py, not uploaded through here. */
+  /** واحدهای اندازه‌گیری, so the form can offer names instead of bare codes. */
+  units: () => request<UnitTable>('/api/units'),
   catalogueStatus: () => request<CatalogueStatus>('/api/catalogue/status'),
   catalogueSearch: (q: string, limit = 25) =>
     request<CatalogueEntry[]>(

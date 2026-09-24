@@ -25,6 +25,7 @@ from moadian.rules.violations import (
     VerificationResult,
     Violation,
 )
+from moadian.units import UNITS
 
 __all__ = ["RuleEngine"]
 
@@ -43,12 +44,11 @@ MAX_SSTT_LENGTH = 400
 #: declared "رشته عددی، حداکثر ۸" and اختیاری.
 MAX_MU_LENGTH = 8
 
-#: The one واحد اندازه‌گیری code this repository can evidence: it is what the
-#: RC_TICS p.20 example invoice and every sample in the official .NET SDK use.
-#: The authoritative list is RC_UMGS.ST on intamedia.ir and is NOT bundled here,
-#: so an unrecognised code is a warning — refusing it would block every legitimate
-#: unit in a table we do not hold.
-KNOWN_MU_CODES = frozenset({"164"})
+#: The organization's واحد اندازه‌گیری codes. A snapshot — see :mod:`moadian.units`
+#: — so an unrecognised code is a warning rather than a refusal: the table is
+#: revised, and blocking a code the organization has since added would be worse
+#: than flagging one it never had.
+KNOWN_MU_CODES = frozenset(UNITS)
 
 
 class RuleEngine:
@@ -184,10 +184,10 @@ class RuleEngine:
                             field="mu",
                             rule="format.mu_unverified",
                             message=(
-                                f"کد واحد اندازه‌گیری «{mu}» در این نسخه قابل بررسی "
-                                "نیست؛ فهرست مرجع (سند واحدهای اندازه‌گیری، "
-                                "intamedia.ir) همراه برنامه نیست. سازمان آن را "
-                                "بررسی می‌کند — خطای ۰۱۰۳۵۰۲ یعنی این کد مجاز نبوده."
+                                f"کد واحد اندازه‌گیری «{mu}» در جدول واحدهای "
+                                f"اندازه‌گیری این نسخه ({len(UNITS)} کد) نیست. اگر "
+                                "مطمئن نیستید، از فهرست انتخاب کنید؛ کد نامعتبر با "
+                                "خطای ۰۱۰۳۵۰۲ رد می‌شود."
                             ),
                             reference="RC_IITP §8-30، جدول ۳۲",
                             severity=Severity.WARNING,
